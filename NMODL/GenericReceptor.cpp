@@ -40,56 +40,58 @@
  
 #define t nrn_threads->_t
 #define dt nrn_threads->_dt
-#define n_ligands _p[0]
-#define n_ligands_columnindex 0
-#define capacity _p[1]
-#define capacity_columnindex 1
-#define kd1 _p[2]
-#define kd1_columnindex 2
-#define efficacy1 _p[3]
-#define efficacy1_columnindex 3
-#define decay1 _p[4]
-#define decay1_columnindex 4
-#define kd2 _p[5]
-#define kd2_columnindex 5
-#define efficacy2 _p[6]
-#define efficacy2_columnindex 6
-#define decay2 _p[7]
-#define decay2_columnindex 7
-#define kd3 _p[8]
-#define kd3_columnindex 8
-#define efficacy3 _p[9]
-#define efficacy3_columnindex 9
-#define decay3 _p[10]
-#define decay3_columnindex 10
-#define kd4 _p[11]
-#define kd4_columnindex 11
-#define efficacy4 _p[12]
-#define efficacy4_columnindex 12
-#define decay4 _p[13]
-#define decay4_columnindex 13
-#define activation _p[14]
-#define activation_columnindex 14
-#define occupancy _p[15]
-#define occupancy_columnindex 15
-#define bound1 _p[16]
-#define bound1_columnindex 16
-#define bound2 _p[17]
-#define bound2_columnindex 17
-#define bound3 _p[18]
-#define bound3_columnindex 18
-#define bound4 _p[19]
-#define bound4_columnindex 19
-#define Dbound1 _p[20]
-#define Dbound1_columnindex 20
-#define Dbound2 _p[21]
-#define Dbound2_columnindex 21
-#define Dbound3 _p[22]
-#define Dbound3_columnindex 22
-#define Dbound4 _p[23]
-#define Dbound4_columnindex 23
-#define _g _p[24]
-#define _g_columnindex 24
+#define baseline_activity _p[0]
+#define baseline_activity_columnindex 0
+#define n_ligands _p[1]
+#define n_ligands_columnindex 1
+#define capacity _p[2]
+#define capacity_columnindex 2
+#define kd1 _p[3]
+#define kd1_columnindex 3
+#define efficacy1 _p[4]
+#define efficacy1_columnindex 4
+#define decay1 _p[5]
+#define decay1_columnindex 5
+#define kd2 _p[6]
+#define kd2_columnindex 6
+#define efficacy2 _p[7]
+#define efficacy2_columnindex 7
+#define decay2 _p[8]
+#define decay2_columnindex 8
+#define kd3 _p[9]
+#define kd3_columnindex 9
+#define efficacy3 _p[10]
+#define efficacy3_columnindex 10
+#define decay3 _p[11]
+#define decay3_columnindex 11
+#define kd4 _p[12]
+#define kd4_columnindex 12
+#define efficacy4 _p[13]
+#define efficacy4_columnindex 13
+#define decay4 _p[14]
+#define decay4_columnindex 14
+#define activation _p[15]
+#define activation_columnindex 15
+#define occupancy _p[16]
+#define occupancy_columnindex 16
+#define bound1 _p[17]
+#define bound1_columnindex 17
+#define bound2 _p[18]
+#define bound2_columnindex 18
+#define bound3 _p[19]
+#define bound3_columnindex 19
+#define bound4 _p[20]
+#define bound4_columnindex 20
+#define Dbound1 _p[21]
+#define Dbound1_columnindex 21
+#define Dbound2 _p[22]
+#define Dbound2_columnindex 22
+#define Dbound3 _p[23]
+#define Dbound3_columnindex 23
+#define Dbound4 _p[24]
+#define Dbound4_columnindex 24
+#define _g _p[25]
+#define _g_columnindex 25
 #define _nd_area  *_ppvar[0].get<double*>()
 #define C_lig1	*_ppvar[2].get<double*>()
 #define _p_C_lig1 _ppvar[2].literal_value<void*>()
@@ -111,6 +113,8 @@
  static int hoc_nrnpointerindex =  2;
  /* external NEURON variables */
  /* declaration of user functions */
+ static double _hoc_max(void*);
+ static double _hoc_min(void*);
  static double _hoc_occ(void*);
  static int _mechtype;
 extern void _nrn_cacheloop_reg(int, int);
@@ -155,10 +159,16 @@ static void register_nmodl_text_and_filename(int mechtype);
  {"loc", _hoc_loc_pnt},
  {"has_loc", _hoc_has_loc},
  {"get_loc", _hoc_get_loc_pnt},
+ {"max", _hoc_max},
+ {"min", _hoc_min},
  {"occ", _hoc_occ},
  {0, 0}
 };
+#define max max_GenericReceptor
+#define min min_GenericReceptor
 #define occ occ_GenericReceptor
+ extern double max( double , double );
+ extern double min( double , double );
  extern double occ( double , double );
  /* declare global and static user variables */
  /* some parameters have upper and lower limits */
@@ -220,6 +230,7 @@ static void _ode_matsol(NrnThread*, Memb_list*, int);
  static const char *_mechanism[] = {
  "7.7.0",
 "GenericReceptor",
+ "baseline_activity",
  "n_ligands",
  "capacity",
  "kd1",
@@ -259,8 +270,9 @@ static void nrn_alloc(Prop* _prop) {
 	_p = nrn_point_prop_->param;
 	_ppvar = nrn_point_prop_->dparam;
  }else{
- 	_p = nrn_prop_data_alloc(_mechtype, 25, _prop);
+ 	_p = nrn_prop_data_alloc(_mechtype, 26, _prop);
  	/*initialize range parameters*/
+ 	baseline_activity = 0;
  	n_ligands = 1;
  	capacity = 1;
  	kd1 = 0.5;
@@ -277,7 +289,7 @@ static void nrn_alloc(Prop* _prop) {
  	decay4 = 0.01;
   }
  	_prop->param = _p;
- 	_prop->param_size = 25;
+ 	_prop->param_size = 26;
   if (!nrn_point_prop_) {
  	_ppvar = nrn_prop_datum_alloc(_mechtype, 7, _prop);
   }
@@ -309,7 +321,7 @@ extern void _cvode_abstol( Symbol**, double*, int);
  #if NMODL_TEXT
   register_nmodl_text_and_filename(_mechtype);
 #endif
-  hoc_register_prop_size(_mechtype, 25, 7);
+  hoc_register_prop_size(_mechtype, 26, 7);
   hoc_register_dparam_semantics(_mechtype, 0, "area");
   hoc_register_dparam_semantics(_mechtype, 1, "pntproc");
   hoc_register_dparam_semantics(_mechtype, 2, "pointer");
@@ -507,6 +519,44 @@ static double _hoc_occ(void* _vptr) {
  return(_r);
 }
  
+double min (  double _lx1 , double _lx2 ) {
+   double _lmin;
+ if ( _lx1 <= _lx2 ) {
+     _lmin = _lx1 ;
+     }
+   else {
+     _lmin = _lx2 ;
+     }
+   
+return _lmin;
+ }
+ 
+static double _hoc_min(void* _vptr) {
+ double _r;
+    _hoc_setdata(_vptr);
+ _r =  min (  *getarg(1) , *getarg(2) );
+ return(_r);
+}
+ 
+double max (  double _lx1 , double _lx2 ) {
+   double _lmax;
+ if ( _lx1 >= _lx2 ) {
+     _lmax = _lx1 ;
+     }
+   else {
+     _lmax = _lx2 ;
+     }
+   
+return _lmax;
+ }
+ 
+static double _hoc_max(void* _vptr) {
+ double _r;
+    _hoc_setdata(_vptr);
+ _r =  max (  *getarg(1) , *getarg(2) );
+ return(_r);
+}
+ 
 static int _ode_count(int _type){ return 4;}
  
 static void _ode_spec(NrnThread* _nt, Memb_list* _ml, int _type) {
@@ -654,10 +704,12 @@ for (_iml = 0; _iml < _cntml; ++_iml) {
  v=_v;
 {
  { error =  states();
- if(error){fprintf(stderr,"at line 68 in file GenericReceptor.mod:\nBREAKPOINT {\n"); nrn_complain(_p); abort_run(error);}
+ if(error){fprintf(stderr,"at line 72 in file GenericReceptor.mod:\n    LOCAL net_activation\n"); nrn_complain(_p); abort_run(error);}
  } {
-   occupancy = bound1 + bound2 + bound3 + bound4 ;
-   activation = bound1 * efficacy1 + bound2 * efficacy2 + bound3 * efficacy3 + bound4 * efficacy4 ;
+   double _lnet_activation ;
+ occupancy = bound1 + bound2 + bound3 + bound4 ;
+   _lnet_activation = bound1 * efficacy1 + bound2 * efficacy2 + bound3 * efficacy3 + bound4 * efficacy4 ;
+   activation = min ( _threadargscomma_ 1.0 , max ( _threadargscomma_ 0.0 , baseline_activity + _lnet_activation ) ) ;
    }
 }}
 
@@ -683,6 +735,7 @@ static void register_nmodl_text_and_filename(int mech_type) {
   "\n"
   "NEURON {\n"
   "    POINT_PROCESS GenericReceptor\n"
+  "    RANGE baseline_activity\n"
   "    RANGE activation, capacity, occupancy\n"
   "    RANGE n_ligands\n"
   "\n"
@@ -696,6 +749,8 @@ static void register_nmodl_text_and_filename(int mech_type) {
   "}\n"
   "\n"
   "PARAMETER {\n"
+  "    baseline_activity = 0\n"
+  "\n"
   "    n_ligands = 1         : Number of active ligands (1-4)\n"
   "\n"
   "    capacity = 1.0        : Max binding capacity (fractional, e.g., 1 = 100%)\n"
@@ -747,9 +802,11 @@ static void register_nmodl_text_and_filename(int mech_type) {
   "}\n"
   "\n"
   "BREAKPOINT {\n"
+  "    LOCAL net_activation\n"
   "    SOLVE states METHOD cnexp\n"
   "    occupancy = bound1 + bound2 + bound3 + bound4\n"
-  "    activation = bound1 * efficacy1 + bound2 * efficacy2 + bound3 * efficacy3 + bound4 * efficacy4\n"
+  "    net_activation = bound1 * efficacy1 + bound2 * efficacy2 + bound3 * efficacy3 + bound4 * efficacy4\n"
+  "    activation = min(1, max(0, baseline_activity + net_activation))\n"
   "}\n"
   "\n"
   "DERIVATIVE states {\n"
@@ -810,6 +867,24 @@ static void register_nmodl_text_and_filename(int mech_type) {
   "        occ = 0\n"
   "    } else {\n"
   "        occ = C_lig / (kd + C_lig)\n"
+  "    }\n"
+  "}\n"
+  "\n"
+  "FUNCTION min(x1, x2) {\n"
+  "    if (x1 <= x2){\n"
+  "        min = x1\n"
+  "    }\n"
+  "    else{\n"
+  "        min = x2\n"
+  "    }\n"
+  "}\n"
+  "\n"
+  "FUNCTION max(x1, x2) {\n"
+  "    if (x1 >= x2){\n"
+  "        max = x1\n"
+  "    }\n"
+  "    else{\n"
+  "        max = x2\n"
   "    }\n"
   "}\n"
   ;

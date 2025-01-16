@@ -9,7 +9,7 @@ ENDCOMMENT
 NEURON {
     POINT_PROCESS NMDA_Channel
     NONSPECIFIC_CURRENT i
-    RANGE i, gmax, e, mgblock, mg, alpha_mg, beta_mg
+    RANGE gmax, e, mgblock, mg, alpha_mg, beta_mg
     POINTER receptor_activation
 }
 

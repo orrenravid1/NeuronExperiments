@@ -18,13 +18,13 @@
 #define exp hoc_Exp
 #endif
  
-#define nrn_init _nrn_init__NMDA_Channel
-#define _nrn_initial _nrn_initial__NMDA_Channel
-#define nrn_cur _nrn_cur__NMDA_Channel
-#define _nrn_current _nrn_current__NMDA_Channel
-#define nrn_jacob _nrn_jacob__NMDA_Channel
-#define nrn_state _nrn_state__NMDA_Channel
-#define _net_receive _net_receive__NMDA_Channel 
+#define nrn_init _nrn_init__AMPA_Channel
+#define _nrn_initial _nrn_initial__AMPA_Channel
+#define nrn_cur _nrn_cur__AMPA_Channel
+#define _nrn_current _nrn_current__AMPA_Channel
+#define nrn_jacob _nrn_jacob__AMPA_Channel
+#define nrn_state _nrn_state__AMPA_Channel
+#define _net_receive _net_receive__AMPA_Channel 
  
 #define _threadargscomma_ /**/
 #define _threadargsprotocomma_ /**/
@@ -41,23 +41,29 @@
 #define dt nrn_threads->_dt
 #define gmax _p[0]
 #define gmax_columnindex 0
-#define e _p[1]
-#define e_columnindex 1
-#define mg _p[2]
-#define mg_columnindex 2
-#define alpha_mg _p[3]
-#define alpha_mg_columnindex 3
-#define beta_mg _p[4]
-#define beta_mg_columnindex 4
-#define i _p[5]
-#define i_columnindex 5
-#define mgblock _p[6]
-#define mgblock_columnindex 6
-#define _g _p[7]
-#define _g_columnindex 7
+#define ena _p[1]
+#define ena_columnindex 1
+#define ek _p[2]
+#define ek_columnindex 2
+#define p_ratio _p[3]
+#define p_ratio_columnindex 3
+#define ina _p[4]
+#define ina_columnindex 4
+#define ik _p[5]
+#define ik_columnindex 5
+#define gna _p[6]
+#define gna_columnindex 6
+#define gk _p[7]
+#define gk_columnindex 7
+#define _g _p[8]
+#define _g_columnindex 8
 #define _nd_area  *_ppvar[0].get<double*>()
-#define receptor_activation	*_ppvar[2].get<double*>()
-#define _p_receptor_activation _ppvar[2].literal_value<void*>()
+#define _ion_ina	*_ppvar[2].get<double*>()
+#define _ion_dinadv	*_ppvar[3].get<double*>()
+#define _ion_ik	*_ppvar[4].get<double*>()
+#define _ion_dikdv	*_ppvar[5].get<double*>()
+#define receptor_activation	*_ppvar[6].get<double*>()
+#define _p_receptor_activation _ppvar[6].literal_value<void*>()
  
 #if MAC
 #if !defined(v)
@@ -67,7 +73,7 @@
 #define h _mlhh
 #endif
 #endif
- static int hoc_nrnpointerindex =  2;
+ static int hoc_nrnpointerindex =  6;
  /* external NEURON variables */
  /* declaration of user functions */
  static int _mechtype;
@@ -122,10 +128,8 @@ static void register_nmodl_text_and_filename(int mechtype);
 };
  static HocParmUnits _hoc_parm_units[] = {
  {"gmax", "uS"},
- {"e", "mV"},
- {"mg", "mM"},
- {"alpha_mg", "/mV"},
- {"i", "nA"},
+ {"ena", "mV"},
+ {"ek", "mV"},
  {"receptor_activation", "1"},
  {0, 0}
 };
@@ -149,19 +153,18 @@ static void  nrn_jacob(NrnThread*, Memb_list*, int);
  /* connect range variables in _p that hoc is supposed to know about */
  static const char *_mechanism[] = {
  "7.7.0",
-"NMDA_Channel",
+"AMPA_Channel",
  "gmax",
- "e",
- "mg",
- "alpha_mg",
- "beta_mg",
+ "ena",
+ "ek",
+ "p_ratio",
  0,
- "i",
- "mgblock",
  0,
  0,
  "receptor_activation",
  0};
+ static Symbol* _na_sym;
+ static Symbol* _k_sym;
  
 extern Prop* need_memb(Symbol*);
 
@@ -173,58 +176,80 @@ static void nrn_alloc(Prop* _prop) {
 	_p = nrn_point_prop_->param;
 	_ppvar = nrn_point_prop_->dparam;
  }else{
- 	_p = nrn_prop_data_alloc(_mechtype, 8, _prop);
+ 	_p = nrn_prop_data_alloc(_mechtype, 9, _prop);
  	/*initialize range parameters*/
  	gmax = 0.1;
- 	e = 0;
- 	mg = 1;
- 	alpha_mg = 0.062;
- 	beta_mg = 3.57;
+ 	ena = 50;
+ 	ek = -90;
+ 	p_ratio = 10;
   }
  	_prop->param = _p;
- 	_prop->param_size = 8;
+ 	_prop->param_size = 9;
   if (!nrn_point_prop_) {
- 	_ppvar = nrn_prop_datum_alloc(_mechtype, 3, _prop);
+ 	_ppvar = nrn_prop_datum_alloc(_mechtype, 7, _prop);
   }
  	_prop->dparam = _ppvar;
  	/*connect ionic variables to this model*/
+ prop_ion = need_memb(_na_sym);
+ 	_ppvar[2] = &prop_ion->param[3]; /* ina */
+ 	_ppvar[3] = &prop_ion->param[4]; /* _ion_dinadv */
+ prop_ion = need_memb(_k_sym);
+ 	_ppvar[4] = &prop_ion->param[3]; /* ik */
+ 	_ppvar[5] = &prop_ion->param[4]; /* _ion_dikdv */
  
 }
  static void _initlists();
+ static void _update_ion_pointer(Datum*);
  extern Symbol* hoc_lookup(const char*);
 extern void _nrn_thread_reg(int, int, void(*)(Datum*));
 extern void _nrn_thread_table_reg(int, void(*)(double*, Datum*, Datum*, NrnThread*, int));
 extern void hoc_register_tolerance(int, HocStateTolerance*, Symbol***);
 extern void _cvode_abstol( Symbol**, double*, int);
 
- extern "C" void _NMDA_Channel_reg() {
+ extern "C" void _AMPA_Channel_reg() {
 	int _vectorized = 0;
   _initlists();
+ 	ion_reg("na", -10000.);
+ 	ion_reg("k", -10000.);
+ 	_na_sym = hoc_lookup("na_ion");
+ 	_k_sym = hoc_lookup("k_ion");
  	_pointtype = point_register_mech(_mechanism,
 	 nrn_alloc,nrn_cur, nrn_jacob, nrn_state, nrn_init,
 	 hoc_nrnpointerindex, 0,
 	 _hoc_create_pnt, _hoc_destroy_pnt, _member_func);
  _mechtype = nrn_get_mechtype(_mechanism[1]);
      _nrn_setdata_reg(_mechtype, _setdata);
+     _nrn_thread_reg(_mechtype, 2, _update_ion_pointer);
  #if NMODL_TEXT
   register_nmodl_text_and_filename(_mechtype);
 #endif
-  hoc_register_prop_size(_mechtype, 8, 3);
+  hoc_register_prop_size(_mechtype, 9, 7);
   hoc_register_dparam_semantics(_mechtype, 0, "area");
   hoc_register_dparam_semantics(_mechtype, 1, "pntproc");
-  hoc_register_dparam_semantics(_mechtype, 2, "pointer");
+  hoc_register_dparam_semantics(_mechtype, 2, "na_ion");
+  hoc_register_dparam_semantics(_mechtype, 3, "na_ion");
+  hoc_register_dparam_semantics(_mechtype, 4, "k_ion");
+  hoc_register_dparam_semantics(_mechtype, 5, "k_ion");
+  hoc_register_dparam_semantics(_mechtype, 6, "pointer");
  	hoc_register_var(hoc_scdoub, hoc_vdoub, hoc_intfunc);
- 	ivoc_help("help ?1 NMDA_Channel NMDA_Channel.mod\n");
+ 	ivoc_help("help ?1 AMPA_Channel AMPA_Channel.mod\n");
  hoc_register_limits(_mechtype, _hoc_parm_limits);
  hoc_register_units(_mechtype, _hoc_parm_units);
  }
 static int _reset;
-static const char *modelname = "NMDA_Channel";
+static const char *modelname = "AMPA_Channel";
 
 static int error;
 static int _ninits = 0;
 static int _match_recurse=1;
 static void _modl_cleanup(){ _match_recurse=1;}
+ extern void nrn_update_ion_pointer(Symbol*, Datum*, int, int);
+ static void _update_ion_pointer(Datum* _ppvar) {
+   nrn_update_ion_pointer(_na_sym, _ppvar, 2, 3);
+   nrn_update_ion_pointer(_na_sym, _ppvar, 3, 4);
+   nrn_update_ion_pointer(_k_sym, _ppvar, 4, 3);
+   nrn_update_ion_pointer(_k_sym, _ppvar, 5, 4);
+ }
 
 static void initmodel() {
   int _i; double _save;_ninits++;
@@ -252,13 +277,16 @@ for (_iml = 0; _iml < _cntml; ++_iml) {
   }
  v = _v;
  initmodel();
-}}
+  }}
 
 static double _nrn_current(double _v){double _current=0.;v=_v;{ {
-   mgblock = 1.0 / ( 1.0 + mg * beta_mg * exp ( - alpha_mg * v ) ) ;
-   i = gmax * receptor_activation * mgblock * ( v - e ) ;
+   gna = gmax * receptor_activation * p_ratio / ( 1.0 + p_ratio ) ;
+   gk = gmax * receptor_activation / ( 1.0 + p_ratio ) ;
+   ina = gna * ( v - ena ) ;
+   ik = gk * ( v - ek ) ;
    }
- _current += i;
+ _current += ina;
+ _current += ik;
 
 } return _current;
 }
@@ -281,9 +309,17 @@ for (_iml = 0; _iml < _cntml; ++_iml) {
     _v = NODEV(_nd);
   }
  _g = _nrn_current(_v + .001);
- 	{ _rhs = _nrn_current(_v);
+ 	{ double _dik;
+ double _dina;
+  _dina = ina;
+  _dik = ik;
+ _rhs = _nrn_current(_v);
+  _ion_dinadv += (_dina - ina)/.001 * 1.e2/ (_nd_area);
+  _ion_dikdv += (_dik - ik)/.001 * 1.e2/ (_nd_area);
  	}
  _g = (_g - _rhs)/.001;
+  _ion_ina += ina * 1.e2/ (_nd_area);
+  _ion_ik += ik * 1.e2/ (_nd_area);
  _g *=  1.e2/(_nd_area);
  _rhs *= 1.e2/(_nd_area);
 #if CACHEVEC
@@ -331,44 +367,45 @@ _first = 0;
 
 #if NMODL_TEXT
 static void register_nmodl_text_and_filename(int mech_type) {
-    const char* nmodl_filename = "NMDA_Channel.mod";
+    const char* nmodl_filename = "AMPA_Channel.mod";
     const char* nmodl_file_text = 
-  "TITLE NMDA_Channel\n"
+  "TITLE AMPA_Channel\n"
   "COMMENT\n"
-  "A simple channel mechanism that takes:\n"
-  " - \"activation\" from some receptor\n"
-  " - voltage-dependent Mg2+ block\n"
-  "And produces a nonspecific current i.\n"
+  "AMPA receptor mechanism with sodium-potassium permeability ratio.\n"
   "ENDCOMMENT\n"
   "\n"
   "NEURON {\n"
-  "    POINT_PROCESS NMDA_Channel\n"
-  "    NONSPECIFIC_CURRENT i\n"
-  "    RANGE gmax, e, mgblock, mg, alpha_mg, beta_mg\n"
+  "    POINT_PROCESS AMPA_Channel\n"
+  "    USEION na WRITE ina\n"
+  "    USEION k WRITE ik\n"
+  "    RANGE gmax, ena, ek, p_ratio\n"
   "    POINTER receptor_activation\n"
   "}\n"
   "\n"
   "PARAMETER {\n"
-  "    gmax     = 0.1 (uS)     : Maximum conductance\n"
-  "    e        = 0   (mV)     : Reversal potential\n"
-  "    mg       = 1   (mM)     : [Mg2+] ext\n"
-  "    alpha_mg = 0.062 (/mV)  : Voltage-dependence factor\n"
-  "    beta_mg  = 3.57         : Mg2+ block scaling\n"
+  "    gmax = 0.1 (uS)    : Maximum conductance\n"
+  "    ena  = 50  (mV)    : Sodium reversal potential\n"
+  "    ek   = -90 (mV)    : Potassium reversal potential\n"
+  "    p_ratio = 10       : Sodium-to-potassium permeability ratio\n"
   "}\n"
   "\n"
   "ASSIGNED {\n"
-  "    v      (mV)\n"
+  "    v      (mV)        : Membrane potential\n"
   "    receptor_activation (1)\n"
-  "    i      (nA)\n"
-  "    mgblock\n"
+  "    ina    (nA)        : Sodium current\n"
+  "    ik     (nA)        : Potassium current\n"
+  "    gna    (uS)        : Effective sodium conductance\n"
+  "    gk     (uS)        : Effective potassium conductance\n"
   "}\n"
   "\n"
   "BREAKPOINT {\n"
-  "    : Mg2+ block factor\n"
-  "    mgblock = 1 / (1 + mg*beta_mg*exp(-alpha_mg*v))\n"
+  "    : Adjust conductance based on permeability ratio\n"
+  "    gna = gmax * receptor_activation * p_ratio / (1 + p_ratio)\n"
+  "    gk  = gmax * receptor_activation / (1 + p_ratio)\n"
   "\n"
-  "    : Current = gmax * activation * mgblock * (V - E)\n"
-  "    i = gmax * receptor_activation * mgblock * (v - e)\n"
+  "    : Currents\n"
+  "    ina = gna * (v - ena)\n"
+  "    ik  = gk * (v - ek)\n"
   "}\n"
   ;
     hoc_reg_nmodl_filename(mech_type, nmodl_filename);

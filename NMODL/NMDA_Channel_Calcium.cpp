@@ -18,13 +18,14 @@
 #define exp hoc_Exp
 #endif
  
-#define nrn_init _nrn_init__NMDA_Channel
-#define _nrn_initial _nrn_initial__NMDA_Channel
-#define nrn_cur _nrn_cur__NMDA_Channel
-#define _nrn_current _nrn_current__NMDA_Channel
-#define nrn_jacob _nrn_jacob__NMDA_Channel
-#define nrn_state _nrn_state__NMDA_Channel
-#define _net_receive _net_receive__NMDA_Channel 
+#define nrn_init _nrn_init__NMDA_Channel_Calcium
+#define _nrn_initial _nrn_initial__NMDA_Channel_Calcium
+#define nrn_cur _nrn_cur__NMDA_Channel_Calcium
+#define _nrn_current _nrn_current__NMDA_Channel_Calcium
+#define nrn_jacob _nrn_jacob__NMDA_Channel_Calcium
+#define nrn_state _nrn_state__NMDA_Channel_Calcium
+#define _net_receive _net_receive__NMDA_Channel_Calcium 
+#define state state__NMDA_Channel_Calcium 
  
 #define _threadargscomma_ /**/
 #define _threadargsprotocomma_ /**/
@@ -43,18 +44,30 @@
 #define gmax_columnindex 0
 #define e _p[1]
 #define e_columnindex 1
-#define mg _p[2]
-#define mg_columnindex 2
-#define alpha_mg _p[3]
-#define alpha_mg_columnindex 3
-#define beta_mg _p[4]
-#define beta_mg_columnindex 4
-#define i _p[5]
-#define i_columnindex 5
-#define mgblock _p[6]
-#define mgblock_columnindex 6
-#define _g _p[7]
-#define _g_columnindex 7
+#define depth _p[2]
+#define depth_columnindex 2
+#define taur _p[3]
+#define taur_columnindex 3
+#define mg _p[4]
+#define mg_columnindex 4
+#define alpha_mg _p[5]
+#define alpha_mg_columnindex 5
+#define beta_mg _p[6]
+#define beta_mg_columnindex 6
+#define i _p[7]
+#define i_columnindex 7
+#define mgblock _p[8]
+#define mgblock_columnindex 8
+#define local_cai _p[9]
+#define local_cai_columnindex 9
+#define g _p[10]
+#define g_columnindex 10
+#define drive_ca _p[11]
+#define drive_ca_columnindex 11
+#define Dlocal_cai _p[12]
+#define Dlocal_cai_columnindex 12
+#define _g _p[13]
+#define _g_columnindex 13
 #define _nd_area  *_ppvar[0].get<double*>()
 #define receptor_activation	*_ppvar[2].get<double*>()
 #define _p_receptor_activation _ppvar[2].literal_value<void*>()
@@ -123,12 +136,17 @@ static void register_nmodl_text_and_filename(int mechtype);
  static HocParmUnits _hoc_parm_units[] = {
  {"gmax", "uS"},
  {"e", "mV"},
+ {"depth", "um"},
+ {"taur", "ms"},
  {"mg", "mM"},
  {"alpha_mg", "/mV"},
+ {"local_cai", "mM"},
  {"i", "nA"},
  {"receptor_activation", "1"},
  {0, 0}
 };
+ static double delta_t = 0.01;
+ static double local_cai0 = 0;
  static double v = 0;
  /* connect global user variables to hoc */
  static DoubScal hoc_scdoub[] = {
@@ -146,12 +164,22 @@ static void  nrn_jacob(NrnThread*, Memb_list*, int);
  static void _hoc_destroy_pnt(void* _vptr) {
    destroy_point_process(_vptr);
 }
+ 
+static int _ode_count(int);
+static void _ode_map(int, double**, double**, double*, Datum*, double*, int);
+static void _ode_spec(NrnThread*, Memb_list*, int);
+static void _ode_matsol(NrnThread*, Memb_list*, int);
+ 
+#define _cvode_ieq _ppvar[3].literal_value<int>()
+ static void _ode_matsol_instance1(_threadargsproto_);
  /* connect range variables in _p that hoc is supposed to know about */
  static const char *_mechanism[] = {
  "7.7.0",
-"NMDA_Channel",
+"NMDA_Channel_Calcium",
  "gmax",
  "e",
+ "depth",
+ "taur",
  "mg",
  "alpha_mg",
  "beta_mg",
@@ -159,6 +187,7 @@ static void  nrn_jacob(NrnThread*, Memb_list*, int);
  "i",
  "mgblock",
  0,
+ "local_cai",
  0,
  "receptor_activation",
  0};
@@ -173,31 +202,38 @@ static void nrn_alloc(Prop* _prop) {
 	_p = nrn_point_prop_->param;
 	_ppvar = nrn_point_prop_->dparam;
  }else{
- 	_p = nrn_prop_data_alloc(_mechtype, 8, _prop);
+ 	_p = nrn_prop_data_alloc(_mechtype, 14, _prop);
  	/*initialize range parameters*/
  	gmax = 0.1;
  	e = 0;
+ 	depth = 0.1;
+ 	taur = 200;
  	mg = 1;
  	alpha_mg = 0.062;
  	beta_mg = 3.57;
   }
  	_prop->param = _p;
- 	_prop->param_size = 8;
+ 	_prop->param_size = 14;
   if (!nrn_point_prop_) {
- 	_ppvar = nrn_prop_datum_alloc(_mechtype, 3, _prop);
+ 	_ppvar = nrn_prop_datum_alloc(_mechtype, 4, _prop);
   }
  	_prop->dparam = _ppvar;
  	/*connect ionic variables to this model*/
  
 }
  static void _initlists();
+  /* some states have an absolute tolerance */
+ static Symbol** _atollist;
+ static HocStateTolerance _hoc_state_tol[] = {
+ {0, 0}
+};
  extern Symbol* hoc_lookup(const char*);
 extern void _nrn_thread_reg(int, int, void(*)(Datum*));
 extern void _nrn_thread_table_reg(int, void(*)(double*, Datum*, Datum*, NrnThread*, int));
 extern void hoc_register_tolerance(int, HocStateTolerance*, Symbol***);
 extern void _cvode_abstol( Symbol**, double*, int);
 
- extern "C" void _NMDA_Channel_reg() {
+ extern "C" void _NMDA_Channel_Calcium_reg() {
 	int _vectorized = 0;
   _initlists();
  	_pointtype = point_register_mech(_mechanism,
@@ -209,26 +245,97 @@ extern void _cvode_abstol( Symbol**, double*, int);
  #if NMODL_TEXT
   register_nmodl_text_and_filename(_mechtype);
 #endif
-  hoc_register_prop_size(_mechtype, 8, 3);
+  hoc_register_prop_size(_mechtype, 14, 4);
   hoc_register_dparam_semantics(_mechtype, 0, "area");
   hoc_register_dparam_semantics(_mechtype, 1, "pntproc");
   hoc_register_dparam_semantics(_mechtype, 2, "pointer");
+  hoc_register_dparam_semantics(_mechtype, 3, "cvodeieq");
+ 	hoc_register_cvode(_mechtype, _ode_count, _ode_map, _ode_spec, _ode_matsol);
+ 	hoc_register_tolerance(_mechtype, _hoc_state_tol, &_atollist);
  	hoc_register_var(hoc_scdoub, hoc_vdoub, hoc_intfunc);
- 	ivoc_help("help ?1 NMDA_Channel NMDA_Channel.mod\n");
+ 	ivoc_help("help ?1 NMDA_Channel_Calcium NMDA_Channel_Calcium.mod\n");
  hoc_register_limits(_mechtype, _hoc_parm_limits);
  hoc_register_units(_mechtype, _hoc_parm_units);
  }
+ static double FARADAY = 96485.3;
 static int _reset;
-static const char *modelname = "NMDA_Channel";
+static const char *modelname = "NMDA Receptor with Calcium Dynamics";
 
 static int error;
 static int _ninits = 0;
 static int _match_recurse=1;
 static void _modl_cleanup(){ _match_recurse=1;}
+ 
+static int _ode_spec1(_threadargsproto_);
+/*static int _ode_matsol1(_threadargsproto_);*/
+ static int _slist1[1], _dlist1[1];
+ static int state(_threadargsproto_);
+ 
+/*CVODE*/
+ static int _ode_spec1 () {_reset=0;
+ {
+   Dlocal_cai = drive_ca - local_cai / taur ;
+   }
+ return _reset;
+}
+ static int _ode_matsol1 () {
+ Dlocal_cai = Dlocal_cai  / (1. - dt*( ( - ( 1.0 ) / taur ) )) ;
+  return 0;
+}
+ /*END CVODE*/
+ static int state () {_reset=0;
+ {
+    local_cai = local_cai + (1. - exp(dt*(( - ( 1.0 ) / taur ))))*(- ( drive_ca ) / ( ( - ( 1.0 ) / taur ) ) - local_cai) ;
+   }
+  return 0;
+}
+ 
+static int _ode_count(int _type){ return 1;}
+ 
+static void _ode_spec(NrnThread* _nt, Memb_list* _ml, int _type) {
+   Datum* _thread;
+   Node* _nd; double _v; int _iml, _cntml;
+  _cntml = _ml->_nodecount;
+  _thread = _ml->_thread;
+  for (_iml = 0; _iml < _cntml; ++_iml) {
+    _p = _ml->_data[_iml]; _ppvar = _ml->_pdata[_iml];
+    _nd = _ml->_nodelist[_iml];
+    v = NODEV(_nd);
+     _ode_spec1 ();
+ }}
+ 
+static void _ode_map(int _ieq, double** _pv, double** _pvdot, double* _pp, Datum* _ppd, double* _atol, int _type) { 
+ 	int _i; _p = _pp; _ppvar = _ppd;
+	_cvode_ieq = _ieq;
+	for (_i=0; _i < 1; ++_i) {
+		_pv[_i] = _pp + _slist1[_i];  _pvdot[_i] = _pp + _dlist1[_i];
+		_cvode_abstol(_atollist, _atol, _i);
+	}
+ }
+ 
+static void _ode_matsol_instance1(_threadargsproto_) {
+ _ode_matsol1 ();
+ }
+ 
+static void _ode_matsol(NrnThread* _nt, Memb_list* _ml, int _type) {
+   Datum* _thread;
+   Node* _nd; double _v; int _iml, _cntml;
+  _cntml = _ml->_nodecount;
+  _thread = _ml->_thread;
+  for (_iml = 0; _iml < _cntml; ++_iml) {
+    _p = _ml->_data[_iml]; _ppvar = _ml->_pdata[_iml];
+    _nd = _ml->_nodelist[_iml];
+    v = NODEV(_nd);
+ _ode_matsol_instance1(_threadargs_);
+ }}
 
 static void initmodel() {
   int _i; double _save;_ninits++;
+ _save = t;
+ t = 0.0;
 {
+  local_cai = local_cai0;
+  _sav_indep = t; t = _save;
 
 }
 }
@@ -256,7 +363,12 @@ for (_iml = 0; _iml < _cntml; ++_iml) {
 
 static double _nrn_current(double _v){double _current=0.;v=_v;{ {
    mgblock = 1.0 / ( 1.0 + mg * beta_mg * exp ( - alpha_mg * v ) ) ;
-   i = gmax * receptor_activation * mgblock * ( v - e ) ;
+   g = gmax * receptor_activation * mgblock ;
+   i = g * ( v - e ) ;
+   drive_ca = - g * ( v - 140.0 ) / ( 2.0 * FARADAY * depth ) ;
+   if ( drive_ca <= 0.0 ) {
+     drive_ca = 0.0 ;
+     }
    }
  _current += i;
 
@@ -318,6 +430,28 @@ for (_iml = 0; _iml < _cntml; ++_iml) {
 }}
 
 static void nrn_state(NrnThread* _nt, Memb_list* _ml, int _type){
+Node *_nd; double _v = 0.0; int* _ni; int _iml, _cntml;
+#if CACHEVEC
+    _ni = _ml->_nodeindices;
+#endif
+_cntml = _ml->_nodecount;
+for (_iml = 0; _iml < _cntml; ++_iml) {
+ _p = _ml->_data[_iml]; _ppvar = _ml->_pdata[_iml];
+ _nd = _ml->_nodelist[_iml];
+#if CACHEVEC
+  if (use_cachevec) {
+    _v = VEC_V(_ni[_iml]);
+  }else
+#endif
+  {
+    _nd = _ml->_nodelist[_iml];
+    _v = NODEV(_nd);
+  }
+ v=_v;
+{
+ { error =  state();
+ if(error){fprintf(stderr,"at line 37 in file NMDA_Channel_Calcium.mod:\nBREAKPOINT {\n"); nrn_complain(_p); abort_run(error);}
+ }}}
 
 }
 
@@ -326,49 +460,74 @@ static void terminal(){}
 static void _initlists() {
  int _i; static int _first = 1;
   if (!_first) return;
+ _slist1[0] = local_cai_columnindex;  _dlist1[0] = Dlocal_cai_columnindex;
 _first = 0;
 }
 
 #if NMODL_TEXT
 static void register_nmodl_text_and_filename(int mech_type) {
-    const char* nmodl_filename = "NMDA_Channel.mod";
+    const char* nmodl_filename = "NMDA_Channel_Calcium.mod";
     const char* nmodl_file_text = 
-  "TITLE NMDA_Channel\n"
-  "COMMENT\n"
-  "A simple channel mechanism that takes:\n"
-  " - \"activation\" from some receptor\n"
-  " - voltage-dependent Mg2+ block\n"
-  "And produces a nonspecific current i.\n"
-  "ENDCOMMENT\n"
+  "TITLE NMDA Receptor with Calcium Dynamics\n"
   "\n"
   "NEURON {\n"
-  "    POINT_PROCESS NMDA_Channel\n"
+  "    POINT_PROCESS NMDA_Channel_Calcium\n"
   "    NONSPECIFIC_CURRENT i\n"
-  "    RANGE gmax, e, mgblock, mg, alpha_mg, beta_mg\n"
+  "    RANGE gmax, e, mgblock, mg, alpha_mg, beta_mg, depth, taur, local_cai\n"
   "    POINTER receptor_activation\n"
   "}\n"
   "\n"
+  "CONSTANT {\n"
+  "    FARADAY = 96485.3 (coulomb/mol) : Faraday's constant\n"
+  "}\n"
+  "\n"
   "PARAMETER {\n"
-  "    gmax     = 0.1 (uS)     : Maximum conductance\n"
-  "    e        = 0   (mV)     : Reversal potential\n"
-  "    mg       = 1   (mM)     : [Mg2+] ext\n"
-  "    alpha_mg = 0.062 (/mV)  : Voltage-dependence factor\n"
-  "    beta_mg  = 3.57         : Mg2+ block scaling\n"
+  "    gmax = 0.1 (uS)          : Maximum total conductance\n"
+  "    e = 0 (mV)               : Reversal potential\n"
+  "    depth = 0.1 (um)         : Shell depth for calcium accumulation\n"
+  "    taur = 200 (ms)          : Calcium decay time constant\n"
+  "    mg = 1 (mM)              : External [Mg2+]\n"
+  "    alpha_mg = 0.062 (/mV)   : Voltage-dependence factor\n"
+  "    beta_mg = 3.57           : Mg2+ block scaling\n"
   "}\n"
   "\n"
   "ASSIGNED {\n"
-  "    v      (mV)\n"
+  "    v (mV)                   : Membrane potential\n"
+  "    i (nA)                   : Nonspecific current\n"
+  "    g (uS)                   : Total channel conductance\n"
+  "    mgblock                  : Magnesium block factor\n"
+  "    drive_ca (mM/ms)         : Calcium influx rate\n"
   "    receptor_activation (1)\n"
-  "    i      (nA)\n"
-  "    mgblock\n"
+  "}\n"
+  "\n"
+  "STATE {\n"
+  "    local_cai (mM)           : Localized calcium concentration\n"
   "}\n"
   "\n"
   "BREAKPOINT {\n"
-  "    : Mg2+ block factor\n"
-  "    mgblock = 1 / (1 + mg*beta_mg*exp(-alpha_mg*v))\n"
+  "    SOLVE state METHOD cnexp\n"
   "\n"
-  "    : Current = gmax * activation * mgblock * (V - E)\n"
-  "    i = gmax * receptor_activation * mgblock * (v - e)\n"
+  "    : Calculate Mg2+ block\n"
+  "    mgblock = 1 / (1 + mg * beta_mg * exp(-alpha_mg * v))\n"
+  "\n"
+  "    : Total conductance\n"
+  "    g = gmax * receptor_activation * mgblock\n"
+  "\n"
+  "    : Nonspecific current\n"
+  "    i = g * (v - e)\n"
+  "\n"
+  "    : Calcium influx rate\n"
+  "    drive_ca = -g * (v - 140) / (2 * FARADAY * depth)\n"
+  "\n"
+  "    : Prevent unphysical calcium extrusion\n"
+  "    if (drive_ca <= 0) {\n"
+  "        drive_ca = 0\n"
+  "    }\n"
+  "}\n"
+  "\n"
+  "DERIVATIVE state {\n"
+  "    : Localized calcium dynamics\n"
+  "    local_cai' = drive_ca - local_cai / taur\n"
   "}\n"
   ;
     hoc_reg_nmodl_filename(mech_type, nmodl_filename);

@@ -2,6 +2,7 @@ TITLE General Receptor with Per-Ligand Decay and Flexible Targeting
 
 NEURON {
     POINT_PROCESS GenericReceptor
+    RANGE baseline_activity
     RANGE activation, capacity, occupancy
     RANGE n_ligands
 
@@ -15,6 +16,8 @@ NEURON {
 }
 
 PARAMETER {
+    baseline_activity = 0
+
     n_ligands = 1         : Number of active ligands (1-4)
 
     capacity = 1.0        : Max binding capacity (fractional, e.g., 1 = 100%)
@@ -66,9 +69,11 @@ INITIAL {
 }
 
 BREAKPOINT {
+    LOCAL net_activation
     SOLVE states METHOD cnexp
     occupancy = bound1 + bound2 + bound3 + bound4
-    activation = bound1 * efficacy1 + bound2 * efficacy2 + bound3 * efficacy3 + bound4 * efficacy4
+    net_activation = bound1 * efficacy1 + bound2 * efficacy2 + bound3 * efficacy3 + bound4 * efficacy4
+    activation = min(1, max(0, baseline_activity + net_activation))
 }
 
 DERIVATIVE states {
@@ -129,5 +134,23 @@ FUNCTION occ(C_lig(uM), kd(uM)) {
         occ = 0
     } else {
         occ = C_lig / (kd + C_lig)
+    }
+}
+
+FUNCTION min(x1, x2) {
+    if (x1 <= x2){
+        min = x1
+    }
+    else{
+        min = x2
+    }
+}
+
+FUNCTION max(x1, x2) {
+    if (x1 >= x2){
+        max = x1
+    }
+    else{
+        max = x2
     }
 }
