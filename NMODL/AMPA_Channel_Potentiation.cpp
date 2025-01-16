@@ -305,7 +305,7 @@ static int _ode_spec1(_threadargsproto_);
  static int _ode_spec1 () {_reset=0;
  {
    if ( NMDA_cai > calcium_threshold ) {
-     DP = potentiation_rate * NMDA_cai ;
+     DP = potentiation_rate * NMDA_cai * ( potentiation_strength - P ) ;
      }
    else {
      DP = - decay_rate * P ;
@@ -315,7 +315,7 @@ static int _ode_spec1(_threadargsproto_);
 }
  static int _ode_matsol1 () {
  if ( NMDA_cai > calcium_threshold ) {
-   DP = DP  / (1. - dt*( 0.0 )) ;
+   DP = DP  / (1. - dt*( ( potentiation_rate * NMDA_cai )*( ( ( - 1.0 ) ) ) )) ;
    }
  else {
    DP = DP  / (1. - dt*( ( - decay_rate )*( 1.0 ) )) ;
@@ -326,7 +326,7 @@ static int _ode_spec1(_threadargsproto_);
  static int state () {_reset=0;
  {
    if ( NMDA_cai > calcium_threshold ) {
-      P = P - dt*(- ( ( potentiation_rate )*( NMDA_cai ) ) ) ;
+      P = P + (1. - exp(dt*(( potentiation_rate * NMDA_cai )*( ( ( - 1.0 ) ) ))))*(- ( ( ( potentiation_rate )*( NMDA_cai ) )*( ( potentiation_strength ) ) ) / ( ( ( potentiation_rate )*( NMDA_cai ) )*( ( ( - 1.0 ) ) ) ) - P) ;
      }
    else {
       P = P + (1. - exp(dt*(( - decay_rate )*( 1.0 ))))*(- ( 0.0 ) / ( ( - decay_rate )*( 1.0 ) ) - P) ;
@@ -591,7 +591,7 @@ static void register_nmodl_text_and_filename(int mech_type) {
   "DERIVATIVE state {\n"
   "    : Potentiation dynamics driven by calcium\n"
   "    if (NMDA_cai > calcium_threshold) {\n"
-  "        P' = potentiation_rate * NMDA_cai\n"
+  "        P' = potentiation_rate * NMDA_cai * (potentiation_strength - P)\n"
   "    } else {\n"
   "        P' = -decay_rate * P               : Potentiation decays to 0 when calcium is low\n"
   "    }\n"

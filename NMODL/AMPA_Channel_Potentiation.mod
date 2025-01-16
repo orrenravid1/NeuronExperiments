@@ -56,8 +56,9 @@ BREAKPOINT {
 
 DERIVATIVE state {
     : Potentiation dynamics driven by calcium
+    : TODO- Make this a smooth transition between dynamics vs if statement
     if (NMDA_cai > calcium_threshold) {
-        P' = potentiation_rate * NMDA_cai
+        P' = potentiation_rate * NMDA_cai * (potentiation_strength - P)
     } else {
         P' = -decay_rate * P               : Potentiation decays to 0 when calcium is low
     }
