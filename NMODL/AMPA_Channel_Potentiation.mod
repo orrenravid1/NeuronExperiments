@@ -6,6 +6,7 @@ NEURON {
     USEION k WRITE ik VALENCE 1
     RANGE baseline_gmax, ena, ek, p_ratio
     RANGE potentiation_threshold, depression_threshold, potentiation_rate, potentiation_strength, depression_rate, depression_strength, P, D
+    RANGE calcium_baseline, potentiation_decay, depression_decay
     POINTER receptor_activation, local_cai
 }
 
@@ -15,12 +16,15 @@ PARAMETER {
     ena = 50 (mV)              : Sodium reversal potential
     ek = -90 (mV)              : Potassium reversal potential
     p_ratio = 10               : Sodium-to-potassium permeability ratio
-    potentiation_threshold = 0.0001 (mM) : Calcium threshold for potentiation
-    depression_threshold = 0.0001 (mM) : Calcium threshold for depression
+    potentiation_threshold = 0.5 (mM) : Calcium threshold for potentiation
+    depression_threshold = 0.5 (mM) : Calcium threshold for depression
     potentiation_rate = 0.01 (/ms)  : Potentiation rate
     depression_rate = 0.005 (/ms)   : Depression rate
     potentiation_strength = 1 (1)  : Multiplier for potentiation
     depression_strength = 1 (1) : Multiplier for depression
+    calcium_baseline = 0.0001 (mM)
+    potentiation_decay = 0.1 (1)
+    depression_decay = 0.1 (1)
 }
 
 ASSIGNED {
@@ -39,8 +43,8 @@ STATE {
 }
 
 INITIAL {
-    P = 0.00001                      : No potentiation initially
-    D = 0.00001                      : No depression initially
+    P = 0                     : No potentiation initially
+    D = 0                     : No depression initially
     gmax = baseline_gmax       : Initial gmax
 }
 
@@ -60,9 +64,19 @@ BREAKPOINT {
 }
 
 DERIVATIVE state {
-    : Potentiation and depression dynamics
-    P' = potentiation_rate * (local_cai - potentiation_threshold) * (potentiation_strength - P) * P
-    D' = depression_rate * (depression_threshold - local_cai) * (depression_strength - D) * D
+    LOCAL relative_calcium
+
+    : Compute relative calcium
+    relative_calcium = local_cai / calcium_baseline
+
+    : Potentiation dynamics (smooth thresholding for calcium)
+    P' = potentiation_rate * max(0, relative_calcium - potentiation_threshold) * (1 - P)
+       - potentiation_decay * P
+
+    : Depression dynamics (smooth thresholding for calcium)
+    : Only unrealistic thing here is that depression can happen at 0 calcium
+    D' = depression_rate * max(0, depression_threshold - relative_calcium) * (1 - D)
+       - depression_decay * D
 }
 
 FUNCTION max(x1, x2) {
