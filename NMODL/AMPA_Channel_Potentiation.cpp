@@ -48,30 +48,38 @@
 #define ek_columnindex 2
 #define p_ratio _p[3]
 #define p_ratio_columnindex 3
-#define calcium_threshold _p[4]
-#define calcium_threshold_columnindex 4
-#define potentiation_rate _p[5]
-#define potentiation_rate_columnindex 5
-#define decay_rate _p[6]
-#define decay_rate_columnindex 6
-#define potentiation_strength _p[7]
-#define potentiation_strength_columnindex 7
-#define P _p[8]
-#define P_columnindex 8
-#define ina _p[9]
-#define ina_columnindex 9
-#define ik _p[10]
-#define ik_columnindex 10
-#define gna _p[11]
-#define gna_columnindex 11
-#define gk _p[12]
-#define gk_columnindex 12
-#define gmax _p[13]
-#define gmax_columnindex 13
-#define DP _p[14]
-#define DP_columnindex 14
-#define _g _p[15]
-#define _g_columnindex 15
+#define potentiation_threshold _p[4]
+#define potentiation_threshold_columnindex 4
+#define depression_threshold _p[5]
+#define depression_threshold_columnindex 5
+#define potentiation_rate _p[6]
+#define potentiation_rate_columnindex 6
+#define depression_rate _p[7]
+#define depression_rate_columnindex 7
+#define potentiation_strength _p[8]
+#define potentiation_strength_columnindex 8
+#define depression_strength _p[9]
+#define depression_strength_columnindex 9
+#define P _p[10]
+#define P_columnindex 10
+#define D _p[11]
+#define D_columnindex 11
+#define ina _p[12]
+#define ina_columnindex 12
+#define ik _p[13]
+#define ik_columnindex 13
+#define gna _p[14]
+#define gna_columnindex 14
+#define gk _p[15]
+#define gk_columnindex 15
+#define gmax _p[16]
+#define gmax_columnindex 16
+#define DP _p[17]
+#define DP_columnindex 17
+#define DD _p[18]
+#define DD_columnindex 18
+#define _g _p[19]
+#define _g_columnindex 19
 #define _nd_area  *_ppvar[0].get<double*>()
 #define _ion_ina	*_ppvar[2].get<double*>()
 #define _ion_dinadv	*_ppvar[3].get<double*>()
@@ -79,8 +87,8 @@
 #define _ion_dikdv	*_ppvar[5].get<double*>()
 #define receptor_activation	*_ppvar[6].get<double*>()
 #define _p_receptor_activation _ppvar[6].literal_value<void*>()
-#define NMDA_cai	*_ppvar[7].get<double*>()
-#define _p_NMDA_cai _ppvar[7].literal_value<void*>()
+#define local_cai	*_ppvar[7].get<double*>()
+#define _p_local_cai _ppvar[7].literal_value<void*>()
  
 #if MAC
 #if !defined(v)
@@ -93,6 +101,7 @@
  static int hoc_nrnpointerindex =  6;
  /* external NEURON variables */
  /* declaration of user functions */
+ static double _hoc_max(void*);
  static int _mechtype;
 extern void _nrn_cacheloop_reg(int, int);
 extern void hoc_register_prop_size(int, int, int);
@@ -136,8 +145,11 @@ static void register_nmodl_text_and_filename(int mechtype);
  {"loc", _hoc_loc_pnt},
  {"has_loc", _hoc_has_loc},
  {"get_loc", _hoc_get_loc_pnt},
+ {"max", _hoc_max},
  {0, 0}
 };
+#define max max_AMPA_Channel_Potentiation
+ extern double max( double , double );
  /* declare global and static user variables */
  /* some parameters have upper and lower limits */
  static HocParmLimits _hoc_parm_limits[] = {
@@ -147,15 +159,19 @@ static void register_nmodl_text_and_filename(int mechtype);
  {"baseline_gmax", "uS"},
  {"ena", "mV"},
  {"ek", "mV"},
- {"calcium_threshold", "mM"},
+ {"potentiation_threshold", "mM"},
+ {"depression_threshold", "mM"},
  {"potentiation_rate", "/ms"},
- {"decay_rate", "/ms"},
+ {"depression_rate", "/ms"},
  {"potentiation_strength", "1"},
+ {"depression_strength", "1"},
  {"P", "1"},
+ {"D", "1"},
  {"receptor_activation", "1"},
- {"NMDA_cai", "mM"},
+ {"local_cai", "mM"},
  {0, 0}
 };
+ static double D0 = 0;
  static double P0 = 0;
  static double delta_t = 0.01;
  static double v = 0;
@@ -191,16 +207,19 @@ static void _ode_matsol(NrnThread*, Memb_list*, int);
  "ena",
  "ek",
  "p_ratio",
- "calcium_threshold",
+ "potentiation_threshold",
+ "depression_threshold",
  "potentiation_rate",
- "decay_rate",
+ "depression_rate",
  "potentiation_strength",
+ "depression_strength",
  0,
  0,
  "P",
+ "D",
  0,
  "receptor_activation",
- "NMDA_cai",
+ "local_cai",
  0};
  static Symbol* _na_sym;
  static Symbol* _k_sym;
@@ -215,19 +234,21 @@ static void nrn_alloc(Prop* _prop) {
 	_p = nrn_point_prop_->param;
 	_ppvar = nrn_point_prop_->dparam;
  }else{
- 	_p = nrn_prop_data_alloc(_mechtype, 16, _prop);
+ 	_p = nrn_prop_data_alloc(_mechtype, 20, _prop);
  	/*initialize range parameters*/
  	baseline_gmax = 0.1;
  	ena = 50;
  	ek = -90;
  	p_ratio = 10;
- 	calcium_threshold = 0.0001;
+ 	potentiation_threshold = 0.0001;
+ 	depression_threshold = 0.0001;
  	potentiation_rate = 0.01;
- 	decay_rate = 0.005;
+ 	depression_rate = 0.005;
  	potentiation_strength = 1;
+ 	depression_strength = 1;
   }
  	_prop->param = _p;
- 	_prop->param_size = 16;
+ 	_prop->param_size = 20;
   if (!nrn_point_prop_) {
  	_ppvar = nrn_prop_datum_alloc(_mechtype, 9, _prop);
   }
@@ -271,7 +292,7 @@ extern void _cvode_abstol( Symbol**, double*, int);
  #if NMODL_TEXT
   register_nmodl_text_and_filename(_mechtype);
 #endif
-  hoc_register_prop_size(_mechtype, 16, 9);
+  hoc_register_prop_size(_mechtype, 20, 9);
   hoc_register_dparam_semantics(_mechtype, 0, "area");
   hoc_register_dparam_semantics(_mechtype, 1, "pntproc");
   hoc_register_dparam_semantics(_mechtype, 2, "na_ion");
@@ -289,7 +310,7 @@ extern void _cvode_abstol( Symbol**, double*, int);
  hoc_register_units(_mechtype, _hoc_parm_units);
  }
 static int _reset;
-static const char *modelname = "AMPA_Channel with Calcium Dependent Potentiation";
+static const char *modelname = "AMPA_Channel with Calcium Dependent Potentiation and Depression";
 
 static int error;
 static int _ninits = 0;
@@ -304,35 +325,42 @@ static int _ode_spec1(_threadargsproto_);
 /*CVODE*/
  static int _ode_spec1 () {_reset=0;
  {
-   if ( NMDA_cai > calcium_threshold ) {
-     DP = potentiation_rate * NMDA_cai * ( potentiation_strength - P ) ;
-     }
-   else {
-     DP = - decay_rate * P ;
-     }
+   DP = potentiation_rate * ( local_cai - potentiation_threshold ) * ( potentiation_strength - P ) * P ;
+   DD = depression_rate * ( depression_threshold - local_cai ) * ( depression_strength - D ) * D ;
    }
  return _reset;
 }
  static int _ode_matsol1 () {
- if ( NMDA_cai > calcium_threshold ) {
-   DP = DP  / (1. - dt*( ( potentiation_rate * NMDA_cai )*( ( ( - 1.0 ) ) ) )) ;
-   }
- else {
-   DP = DP  / (1. - dt*( ( - decay_rate )*( 1.0 ) )) ;
-   }
+ DP = DP  / (1. - dt*( (( ( potentiation_rate * ( local_cai - potentiation_threshold ) )*( ( ( - 1.0 ) ) ) )*( P ) + ( potentiation_rate * ( local_cai - potentiation_threshold ) * ( potentiation_strength - P ) )*( 1.0 )) )) ;
+ DD = DD  / (1. - dt*( (( ( depression_rate * ( depression_threshold - local_cai ) )*( ( ( - 1.0 ) ) ) )*( D ) + ( depression_rate * ( depression_threshold - local_cai ) * ( depression_strength - D ) )*( 1.0 )) )) ;
   return 0;
 }
  /*END CVODE*/
  static int state () {_reset=0;
  {
-   if ( NMDA_cai > calcium_threshold ) {
-      P = P + (1. - exp(dt*(( potentiation_rate * NMDA_cai )*( ( ( - 1.0 ) ) ))))*(- ( ( ( potentiation_rate )*( NMDA_cai ) )*( ( potentiation_strength ) ) ) / ( ( ( potentiation_rate )*( NMDA_cai ) )*( ( ( - 1.0 ) ) ) ) - P) ;
-     }
-   else {
-      P = P + (1. - exp(dt*(( - decay_rate )*( 1.0 ))))*(- ( 0.0 ) / ( ( - decay_rate )*( 1.0 ) ) - P) ;
-     }
+    P = P + (1. - exp(dt*((( ( potentiation_rate * ( local_cai - potentiation_threshold ) )*( ( ( - 1.0 ) ) ) )*( P ) + ( potentiation_rate * ( local_cai - potentiation_threshold ) * ( potentiation_strength - P ) )*( 1.0 )))))*( - P) ;
+    D = D + (1. - exp(dt*((( ( depression_rate * ( depression_threshold - local_cai ) )*( ( ( - 1.0 ) ) ) )*( D ) + ( depression_rate * ( depression_threshold - local_cai ) * ( depression_strength - D ) )*( 1.0 )))))*( - D) ;
    }
   return 0;
+}
+ 
+double max (  double _lx1 , double _lx2 ) {
+   double _lmax;
+ if ( _lx1 >= _lx2 ) {
+     _lmax = _lx1 ;
+     }
+   else {
+     _lmax = _lx2 ;
+     }
+   
+return _lmax;
+ }
+ 
+static double _hoc_max(void* _vptr) {
+ double _r;
+    _hoc_setdata(_vptr);
+ _r =  max (  *getarg(1) , *getarg(2) );
+ return(_r);
 }
  
 static int _ode_count(int _type){ return 2;}
@@ -386,9 +414,11 @@ static void initmodel() {
  _save = t;
  t = 0.0;
 {
+  D = D0;
   P = P0;
  {
-   P = 0.0 ;
+   P = 0.00001 ;
+   D = 0.00001 ;
    gmax = baseline_gmax ;
    }
   _sav_indep = t; t = _save;
@@ -418,7 +448,7 @@ for (_iml = 0; _iml < _cntml; ++_iml) {
   }}
 
 static double _nrn_current(double _v){double _current=0.;v=_v;{ {
-   gmax = baseline_gmax * ( 1.0 + P * potentiation_strength ) ;
+   gmax = max ( _threadargscomma_ 0.0 , baseline_gmax * ( 1.0 + P * potentiation_strength - D * depression_strength ) ) ;
    gna = gmax * receptor_activation * p_ratio / ( 1.0 + p_ratio ) ;
    gk = gmax * receptor_activation / ( 1.0 + p_ratio ) ;
    ina = gna * ( v - ena ) ;
@@ -513,7 +543,7 @@ for (_iml = 0; _iml < _cntml; ++_iml) {
  v=_v;
 {
  { error =  state();
- if(error){fprintf(stderr,"at line 42 in file AMPA_Channel_Potentiation.mod:\nBREAKPOINT {\n"); nrn_complain(_p); abort_run(error);}
+ if(error){fprintf(stderr,"at line 47 in file AMPA_Channel_Potentiation.mod:\nBREAKPOINT {\n"); nrn_complain(_p); abort_run(error);}
  }  }}
 
 }
@@ -524,7 +554,7 @@ static void _initlists() {
  int _i; static int _first = 1;
   if (!_first) return;
  _slist1[0] = P_columnindex;  _dlist1[0] = DP_columnindex;
- _slist1[1] = P_columnindex;  _dlist1[1] = DP_columnindex;
+ _slist1[1] = D_columnindex;  _dlist1[1] = DD_columnindex;
 _first = 0;
 }
 
@@ -532,14 +562,15 @@ _first = 0;
 static void register_nmodl_text_and_filename(int mech_type) {
     const char* nmodl_filename = "AMPA_Channel_Potentiation.mod";
     const char* nmodl_file_text = 
-  "TITLE AMPA_Channel with Calcium Dependent Potentiation\n"
+  "TITLE AMPA_Channel with Calcium Dependent Potentiation and Depression\n"
   "\n"
   "NEURON {\n"
   "    POINT_PROCESS AMPA_Channel_Potentiation\n"
   "    USEION na WRITE ina VALENCE 1\n"
   "    USEION k WRITE ik VALENCE 1\n"
-  "    RANGE baseline_gmax, ena, ek, p_ratio, calcium_threshold, potentiation_rate, potentiation_strength, decay_rate, P\n"
-  "    POINTER receptor_activation, NMDA_cai\n"
+  "    RANGE baseline_gmax, ena, ek, p_ratio\n"
+  "    RANGE potentiation_threshold, depression_threshold, potentiation_rate, potentiation_strength, depression_rate, depression_strength, P, D\n"
+  "    POINTER receptor_activation, local_cai\n"
   "}\n"
   "\n"
   "PARAMETER {\n"
@@ -548,15 +579,17 @@ static void register_nmodl_text_and_filename(int mech_type) {
   "    ena = 50 (mV)              : Sodium reversal potential\n"
   "    ek = -90 (mV)              : Potassium reversal potential\n"
   "    p_ratio = 10               : Sodium-to-potassium permeability ratio\n"
-  "    calcium_threshold = 0.0001 (mM) : Calcium threshold for potentiation\n"
+  "    potentiation_threshold = 0.0001 (mM) : Calcium threshold for potentiation\n"
+  "    depression_threshold = 0.0001 (mM) : Calcium threshold for depression\n"
   "    potentiation_rate = 0.01 (/ms)  : Potentiation rate\n"
-  "    decay_rate = 0.005 (/ms)        : Potentiation decay rate\n"
+  "    depression_rate = 0.005 (/ms)   : Depression rate\n"
   "    potentiation_strength = 1 (1)  : Multiplier for potentiation\n"
+  "    depression_strength = 1 (1) : Multiplier for depression\n"
   "}\n"
   "\n"
   "ASSIGNED {\n"
   "    v (mV)                     : Membrane potential\n"
-  "    NMDA_cai (mM)              : NMDA calcium concentration\n"
+  "    local_cai (mM)             : Local calcium concentration\n"
   "    ina (nA)                   : Sodium current\n"
   "    ik (nA)                    : Potassium current\n"
   "    gna (uS)                   : Sodium conductance\n"
@@ -566,10 +599,12 @@ static void register_nmodl_text_and_filename(int mech_type) {
   "\n"
   "STATE {\n"
   "    P (1)                      : Potentiation factor (scaling gmax)\n"
+  "    D (1)                      : Depression factor (scaling gmax)\n"
   "}\n"
   "\n"
   "INITIAL {\n"
-  "    P = 0                      : No potentiation initially\n"
+  "    P = 0.00001                      : No potentiation initially\n"
+  "    D = 0.00001                      : No depression initially\n"
   "    gmax = baseline_gmax       : Initial gmax\n"
   "}\n"
   "\n"
@@ -577,7 +612,7 @@ static void register_nmodl_text_and_filename(int mech_type) {
   "    SOLVE state METHOD cnexp\n"
   "\n"
   "    : Scale gmax by potentiation factor\n"
-  "    gmax = baseline_gmax * (1 + P * potentiation_strength)\n"
+  "    gmax = max(0, baseline_gmax * (1 + P * potentiation_strength - D * depression_strength))\n"
   "\n"
   "    : Calculate sodium and potassium conductances using permeability ratio\n"
   "    gna = gmax * receptor_activation * p_ratio / (1 + p_ratio)\n"
@@ -589,11 +624,17 @@ static void register_nmodl_text_and_filename(int mech_type) {
   "}\n"
   "\n"
   "DERIVATIVE state {\n"
-  "    : Potentiation dynamics driven by calcium\n"
-  "    if (NMDA_cai > calcium_threshold) {\n"
-  "        P' = potentiation_rate * NMDA_cai * (potentiation_strength - P)\n"
-  "    } else {\n"
-  "        P' = -decay_rate * P               : Potentiation decays to 0 when calcium is low\n"
+  "    : Potentiation and depression dynamics\n"
+  "    P' = potentiation_rate * (local_cai - potentiation_threshold) * (potentiation_strength - P) * P\n"
+  "    D' = depression_rate * (depression_threshold - local_cai) * (depression_strength - D) * D\n"
+  "}\n"
+  "\n"
+  "FUNCTION max(x1, x2) {\n"
+  "    if (x1 >= x2){\n"
+  "        max = x1\n"
+  "    }\n"
+  "    else{\n"
+  "        max = x2\n"
   "    }\n"
   "}\n"
   ;

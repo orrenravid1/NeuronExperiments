@@ -1,11 +1,12 @@
-TITLE AMPA_Channel with Calcium Dependent Potentiation
+TITLE AMPA_Channel with Calcium Dependent Potentiation and Depression
 
 NEURON {
     POINT_PROCESS AMPA_Channel_Potentiation
     USEION na WRITE ina VALENCE 1
     USEION k WRITE ik VALENCE 1
-    RANGE baseline_gmax, ena, ek, p_ratio, calcium_threshold, potentiation_rate, potentiation_strength, decay_rate, P
-    POINTER receptor_activation, NMDA_cai
+    RANGE baseline_gmax, ena, ek, p_ratio
+    RANGE potentiation_threshold, depression_threshold, potentiation_rate, potentiation_strength, depression_rate, depression_strength, P, D
+    POINTER receptor_activation, local_cai
 }
 
 PARAMETER {
@@ -14,15 +15,17 @@ PARAMETER {
     ena = 50 (mV)              : Sodium reversal potential
     ek = -90 (mV)              : Potassium reversal potential
     p_ratio = 10               : Sodium-to-potassium permeability ratio
-    calcium_threshold = 0.0001 (mM) : Calcium threshold for potentiation
+    potentiation_threshold = 0.0001 (mM) : Calcium threshold for potentiation
+    depression_threshold = 0.0001 (mM) : Calcium threshold for depression
     potentiation_rate = 0.01 (/ms)  : Potentiation rate
-    decay_rate = 0.005 (/ms)        : Potentiation decay rate
+    depression_rate = 0.005 (/ms)   : Depression rate
     potentiation_strength = 1 (1)  : Multiplier for potentiation
+    depression_strength = 1 (1) : Multiplier for depression
 }
 
 ASSIGNED {
     v (mV)                     : Membrane potential
-    NMDA_cai (mM)              : NMDA calcium concentration
+    local_cai (mM)             : Local calcium concentration
     ina (nA)                   : Sodium current
     ik (nA)                    : Potassium current
     gna (uS)                   : Sodium conductance
@@ -32,10 +35,12 @@ ASSIGNED {
 
 STATE {
     P (1)                      : Potentiation factor (scaling gmax)
+    D (1)                      : Depression factor (scaling gmax)
 }
 
 INITIAL {
-    P = 0                      : No potentiation initially
+    P = 0.00001                      : No potentiation initially
+    D = 0.00001                      : No depression initially
     gmax = baseline_gmax       : Initial gmax
 }
 
@@ -43,7 +48,7 @@ BREAKPOINT {
     SOLVE state METHOD cnexp
 
     : Scale gmax by potentiation factor
-    gmax = baseline_gmax * (1 + P * potentiation_strength)
+    gmax = max(0, baseline_gmax * (1 + P * potentiation_strength - D * depression_strength))
 
     : Calculate sodium and potassium conductances using permeability ratio
     gna = gmax * receptor_activation * p_ratio / (1 + p_ratio)
@@ -55,11 +60,16 @@ BREAKPOINT {
 }
 
 DERIVATIVE state {
-    : Potentiation dynamics driven by calcium
-    : TODO- Make this a smooth transition between dynamics vs if statement
-    if (NMDA_cai > calcium_threshold) {
-        P' = potentiation_rate * NMDA_cai * (potentiation_strength - P)
-    } else {
-        P' = -decay_rate * P               : Potentiation decays to 0 when calcium is low
+    : Potentiation and depression dynamics
+    P' = potentiation_rate * (local_cai - potentiation_threshold) * (potentiation_strength - P) * P
+    D' = depression_rate * (depression_threshold - local_cai) * (depression_strength - D) * D
+}
+
+FUNCTION max(x1, x2) {
+    if (x1 >= x2){
+        max = x1
+    }
+    else{
+        max = x2
     }
 }
