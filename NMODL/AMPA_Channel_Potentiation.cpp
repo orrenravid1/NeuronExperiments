@@ -8,14 +8,41 @@
 #undef PI
 #define nil 0
 #define _pval pval
+// clang-format off
 #include "md1redef.h"
-#include "section.h"
+#include "section_fwd.hpp"
 #include "nrniv_mf.h"
 #include "md2redef.h"
+#include "nrnconf.h"
+// clang-format on
+#include "neuron/cache/mechanism_range.hpp"
+#include <vector>
+using std::size_t;
+static auto& std_cerr_stream = std::cerr;
+static constexpr auto number_of_datum_variables = 8;
+static constexpr auto number_of_floating_point_variables = 23;
+namespace {
+template <typename T>
+using _nrn_mechanism_std_vector = std::vector<T>;
+using _nrn_model_sorted_token = neuron::model_sorted_token;
+using _nrn_mechanism_cache_range = neuron::cache::MechanismRange<number_of_floating_point_variables, number_of_datum_variables>;
+using _nrn_mechanism_cache_instance = neuron::cache::MechanismInstance<number_of_floating_point_variables, number_of_datum_variables>;
+using _nrn_non_owning_id_without_container = neuron::container::non_owning_identifier_without_container;
+template <typename T>
+using _nrn_mechanism_field = neuron::mechanism::field<T>;
+template <typename... Args>
+void _nrn_mechanism_register_data_fields(Args&&... args) {
+  neuron::mechanism::register_data_fields(std::forward<Args>(args)...);
+}
+}
  
 #if !NRNGPU
 #undef exp
 #define exp hoc_Exp
+#if NRN_ENABLE_ARCH_INDEP_EXP_POW
+#undef pow
+#define pow hoc_pow
+#endif
 #endif
  
 #define nrn_init _nrn_init__AMPA_Channel_Potentiation
@@ -29,92 +56,88 @@
  
 #define _threadargscomma_ /**/
 #define _threadargsprotocomma_ /**/
+#define _internalthreadargsprotocomma_ /**/
 #define _threadargs_ /**/
 #define _threadargsproto_ /**/
+#define _internalthreadargsproto_ /**/
  	/*SUPPRESS 761*/
 	/*SUPPRESS 762*/
 	/*SUPPRESS 763*/
 	/*SUPPRESS 765*/
 	 extern double *hoc_getarg(int);
- static double *_p; static Datum *_ppvar;
  
 #define t nrn_threads->_t
 #define dt nrn_threads->_dt
-#define baseline_gmax _p[0]
+#define baseline_gmax _ml->template fpfield<0>(_iml)
 #define baseline_gmax_columnindex 0
-#define ena _p[1]
+#define ena _ml->template fpfield<1>(_iml)
 #define ena_columnindex 1
-#define ek _p[2]
+#define ek _ml->template fpfield<2>(_iml)
 #define ek_columnindex 2
-#define p_ratio _p[3]
+#define p_ratio _ml->template fpfield<3>(_iml)
 #define p_ratio_columnindex 3
-#define potentiation_threshold _p[4]
+#define potentiation_threshold _ml->template fpfield<4>(_iml)
 #define potentiation_threshold_columnindex 4
-#define depression_threshold _p[5]
+#define depression_threshold _ml->template fpfield<5>(_iml)
 #define depression_threshold_columnindex 5
-#define potentiation_rate _p[6]
+#define potentiation_rate _ml->template fpfield<6>(_iml)
 #define potentiation_rate_columnindex 6
-#define depression_rate _p[7]
+#define depression_rate _ml->template fpfield<7>(_iml)
 #define depression_rate_columnindex 7
-#define potentiation_strength _p[8]
+#define potentiation_strength _ml->template fpfield<8>(_iml)
 #define potentiation_strength_columnindex 8
-#define depression_strength _p[9]
+#define depression_strength _ml->template fpfield<9>(_iml)
 #define depression_strength_columnindex 9
-#define calcium_baseline _p[10]
+#define calcium_baseline _ml->template fpfield<10>(_iml)
 #define calcium_baseline_columnindex 10
-#define potentiation_decay _p[11]
+#define potentiation_decay _ml->template fpfield<11>(_iml)
 #define potentiation_decay_columnindex 11
-#define depression_decay _p[12]
+#define depression_decay _ml->template fpfield<12>(_iml)
 #define depression_decay_columnindex 12
-#define P _p[13]
+#define P _ml->template fpfield<13>(_iml)
 #define P_columnindex 13
-#define D _p[14]
+#define D _ml->template fpfield<14>(_iml)
 #define D_columnindex 14
-#define ina _p[15]
+#define ina _ml->template fpfield<15>(_iml)
 #define ina_columnindex 15
-#define ik _p[16]
+#define ik _ml->template fpfield<16>(_iml)
 #define ik_columnindex 16
-#define gna _p[17]
+#define gna _ml->template fpfield<17>(_iml)
 #define gna_columnindex 17
-#define gk _p[18]
+#define gk _ml->template fpfield<18>(_iml)
 #define gk_columnindex 18
-#define gmax _p[19]
+#define gmax _ml->template fpfield<19>(_iml)
 #define gmax_columnindex 19
-#define DP _p[20]
+#define DP _ml->template fpfield<20>(_iml)
 #define DP_columnindex 20
-#define DD _p[21]
+#define DD _ml->template fpfield<21>(_iml)
 #define DD_columnindex 21
-#define _g _p[22]
+#define _g _ml->template fpfield<22>(_iml)
 #define _g_columnindex 22
-#define _nd_area  *_ppvar[0].get<double*>()
-#define _ion_ina	*_ppvar[2].get<double*>()
-#define _ion_dinadv	*_ppvar[3].get<double*>()
-#define _ion_ik	*_ppvar[4].get<double*>()
-#define _ion_dikdv	*_ppvar[5].get<double*>()
+#define _nd_area *_ml->dptr_field<0>(_iml)
+#define _ion_ina *(_ml->dptr_field<2>(_iml))
+#define _p_ion_ina static_cast<neuron::container::data_handle<double>>(_ppvar[2])
+#define _ion_dinadv *(_ml->dptr_field<3>(_iml))
+#define _ion_ik *(_ml->dptr_field<4>(_iml))
+#define _p_ion_ik static_cast<neuron::container::data_handle<double>>(_ppvar[4])
+#define _ion_dikdv *(_ml->dptr_field<5>(_iml))
 #define receptor_activation	*_ppvar[6].get<double*>()
 #define _p_receptor_activation _ppvar[6].literal_value<void*>()
 #define local_cai	*_ppvar[7].get<double*>()
 #define _p_local_cai _ppvar[7].literal_value<void*>()
- 
-#if MAC
-#if !defined(v)
-#define v _mlhv
-#endif
-#if !defined(h)
-#define h _mlhh
-#endif
-#endif
+ static _nrn_mechanism_cache_instance _ml_real{nullptr};
+static _nrn_mechanism_cache_range *_ml{&_ml_real};
+static size_t _iml{0};
+static Datum *_ppvar;
  static int hoc_nrnpointerindex =  6;
  /* external NEURON variables */
  /* declaration of user functions */
  static double _hoc_max(void*);
  static int _mechtype;
 extern void _nrn_cacheloop_reg(int, int);
-extern void hoc_register_prop_size(int, int, int);
 extern void hoc_register_limits(int, HocParmLimits*);
 extern void hoc_register_units(int, HocParmUnits*);
 extern void nrn_promote(Prop*, int, int);
-extern Memb_func* memb_func;
  
 #define NMODL_TEXT 1
 #if NMODL_TEXT
@@ -135,14 +158,7 @@ static void register_nmodl_text_and_filename(int mechtype);
  static double _hoc_get_loc_pnt(void* _vptr) {
  double get_loc_point_process(void*); return (get_loc_point_process(_vptr));
 }
- extern void _nrn_setdata_reg(int, void(*)(Prop*));
- static void _setdata(Prop* _prop) {
- _p = _prop->param; _ppvar = _prop->dparam;
- }
- static void _hoc_setdata(void* _vptr) { Prop* _prop;
- _prop = ((Point_process*)_vptr)->_prop;
-   _setdata(_prop);
- }
+ static void _hoc_setdata(void*);
  /* connect user functions to hoc names */
  static VoidFunc hoc_intfunc[] = {
  {0, 0}
@@ -157,6 +173,8 @@ static void register_nmodl_text_and_filename(int mechtype);
 #define max max_AMPA_Channel_Potentiation
  extern double max( double , double );
  /* declare global and static user variables */
+ #define gind 0
+ #define _gth 0
  /* some parameters have upper and lower limits */
  static HocParmLimits _hoc_parm_limits[] = {
  {0, 0, 0}
@@ -192,22 +210,33 @@ static void register_nmodl_text_and_filename(int mechtype);
  {0, 0, 0}
 };
  static double _sav_indep;
+ extern void _nrn_setdata_reg(int, void(*)(Prop*));
+ static void _setdata(Prop* _prop) {
+ neuron::legacy::set_globals_from_prop(_prop, _ml_real, _ml, _iml);
+_ppvar = _nrn_mechanism_access_dparam(_prop);
+ Node * _node = _nrn_mechanism_access_node(_prop);
+v = _nrn_mechanism_access_voltage(_node);
+ }
+ static void _hoc_setdata(void* _vptr) { Prop* _prop;
+ _prop = ((Point_process*)_vptr)->_prop;
+   _setdata(_prop);
+ }
  static void nrn_alloc(Prop*);
-static void  nrn_init(NrnThread*, Memb_list*, int);
-static void nrn_state(NrnThread*, Memb_list*, int);
- static void nrn_cur(NrnThread*, Memb_list*, int);
-static void  nrn_jacob(NrnThread*, Memb_list*, int);
+static void nrn_init(_nrn_model_sorted_token const&, NrnThread*, Memb_list*, int);
+static void nrn_state(_nrn_model_sorted_token const&, NrnThread*, Memb_list*, int);
+ static void nrn_cur(_nrn_model_sorted_token const&, NrnThread*, Memb_list*, int);
+static void nrn_jacob(_nrn_model_sorted_token const&, NrnThread*, Memb_list*, int);
  static void _hoc_destroy_pnt(void* _vptr) {
    destroy_point_process(_vptr);
 }
  
 static int _ode_count(int);
-static void _ode_map(int, double**, double**, double*, Datum*, double*, int);
-static void _ode_spec(NrnThread*, Memb_list*, int);
-static void _ode_matsol(NrnThread*, Memb_list*, int);
+static void _ode_map(Prop*, int, neuron::container::data_handle<double>*, neuron::container::data_handle<double>*, double*, int);
+static void _ode_spec(_nrn_model_sorted_token const&, NrnThread*, Memb_list*, int);
+static void _ode_matsol(_nrn_model_sorted_token const&, NrnThread*, Memb_list*, int);
  
 #define _cvode_ieq _ppvar[8].literal_value<int>()
- static void _ode_matsol_instance1(_threadargsproto_);
+ static void _ode_matsol_instance1(_internalthreadargsproto_);
  /* connect range variables in _p that hoc is supposed to know about */
  static const char *_mechanism[] = {
  "7.7.0",
@@ -236,45 +265,62 @@ static void _ode_matsol(NrnThread*, Memb_list*, int);
  static Symbol* _na_sym;
  static Symbol* _k_sym;
  
+ /* Used by NrnProperty */
+ static _nrn_mechanism_std_vector<double> _parm_default{
+     0.1, /* baseline_gmax */
+     50, /* ena */
+     -90, /* ek */
+     10, /* p_ratio */
+     0.5, /* potentiation_threshold */
+     0.5, /* depression_threshold */
+     0.01, /* potentiation_rate */
+     0.005, /* depression_rate */
+     1, /* potentiation_strength */
+     1, /* depression_strength */
+     0.0001, /* calcium_baseline */
+     0.1, /* potentiation_decay */
+     0.1, /* depression_decay */
+ }; 
+ 
+ 
 extern Prop* need_memb(Symbol*);
-
 static void nrn_alloc(Prop* _prop) {
-	Prop *prop_ion;
-	double *_p; Datum *_ppvar;
+  Prop *prop_ion{};
+  Datum *_ppvar{};
   if (nrn_point_prop_) {
-	_prop->_alloc_seq = nrn_point_prop_->_alloc_seq;
-	_p = nrn_point_prop_->param;
-	_ppvar = nrn_point_prop_->dparam;
- }else{
- 	_p = nrn_prop_data_alloc(_mechtype, 23, _prop);
+    _nrn_mechanism_access_alloc_seq(_prop) = _nrn_mechanism_access_alloc_seq(nrn_point_prop_);
+    _ppvar = _nrn_mechanism_access_dparam(nrn_point_prop_);
+  } else {
+   _ppvar = nrn_prop_datum_alloc(_mechtype, 9, _prop);
+    _nrn_mechanism_access_dparam(_prop) = _ppvar;
+     _nrn_mechanism_cache_instance _ml_real{_prop};
+    auto* const _ml = &_ml_real;
+    size_t const _iml{};
+    assert(_nrn_mechanism_get_num_vars(_prop) == 23);
  	/*initialize range parameters*/
- 	baseline_gmax = 0.1;
- 	ena = 50;
- 	ek = -90;
- 	p_ratio = 10;
- 	potentiation_threshold = 0.5;
- 	depression_threshold = 0.5;
- 	potentiation_rate = 0.01;
- 	depression_rate = 0.005;
- 	potentiation_strength = 1;
- 	depression_strength = 1;
- 	calcium_baseline = 0.0001;
- 	potentiation_decay = 0.1;
- 	depression_decay = 0.1;
+ 	baseline_gmax = _parm_default[0]; /* 0.1 */
+ 	ena = _parm_default[1]; /* 50 */
+ 	ek = _parm_default[2]; /* -90 */
+ 	p_ratio = _parm_default[3]; /* 10 */
+ 	potentiation_threshold = _parm_default[4]; /* 0.5 */
+ 	depression_threshold = _parm_default[5]; /* 0.5 */
+ 	potentiation_rate = _parm_default[6]; /* 0.01 */
+ 	depression_rate = _parm_default[7]; /* 0.005 */
+ 	potentiation_strength = _parm_default[8]; /* 1 */
+ 	depression_strength = _parm_default[9]; /* 1 */
+ 	calcium_baseline = _parm_default[10]; /* 0.0001 */
+ 	potentiation_decay = _parm_default[11]; /* 0.1 */
+ 	depression_decay = _parm_default[12]; /* 0.1 */
   }
- 	_prop->param = _p;
- 	_prop->param_size = 23;
-  if (!nrn_point_prop_) {
- 	_ppvar = nrn_prop_datum_alloc(_mechtype, 9, _prop);
-  }
- 	_prop->dparam = _ppvar;
+ 	 assert(_nrn_mechanism_get_num_vars(_prop) == 23);
+ 	_nrn_mechanism_access_dparam(_prop) = _ppvar;
  	/*connect ionic variables to this model*/
  prop_ion = need_memb(_na_sym);
- 	_ppvar[2] = &prop_ion->param[3]; /* ina */
- 	_ppvar[3] = &prop_ion->param[4]; /* _ion_dinadv */
+ 	_ppvar[2] = _nrn_mechanism_get_param_handle(prop_ion, 3); /* ina */
+ 	_ppvar[3] = _nrn_mechanism_get_param_handle(prop_ion, 4); /* _ion_dinadv */
  prop_ion = need_memb(_k_sym);
- 	_ppvar[4] = &prop_ion->param[3]; /* ik */
- 	_ppvar[5] = &prop_ion->param[4]; /* _ion_dikdv */
+ 	_ppvar[4] = _nrn_mechanism_get_param_handle(prop_ion, 3); /* ik */
+ 	_ppvar[5] = _nrn_mechanism_get_param_handle(prop_ion, 4); /* _ion_dikdv */
  
 }
  static void _initlists();
@@ -283,10 +329,9 @@ static void nrn_alloc(Prop* _prop) {
  static HocStateTolerance _hoc_state_tol[] = {
  {0, 0}
 };
- static void _update_ion_pointer(Datum*);
  extern Symbol* hoc_lookup(const char*);
 extern void _nrn_thread_reg(int, int, void(*)(Datum*));
-extern void _nrn_thread_table_reg(int, void(*)(double*, Datum*, Datum*, NrnThread*, int));
+void _nrn_thread_table_reg(int, nrn_thread_table_check_t);
 extern void hoc_register_tolerance(int, HocStateTolerance*, Symbol***);
 extern void _cvode_abstol( Symbol**, double*, int);
 
@@ -302,11 +347,44 @@ extern void _cvode_abstol( Symbol**, double*, int);
 	 hoc_nrnpointerindex, 0,
 	 _hoc_create_pnt, _hoc_destroy_pnt, _member_func);
  _mechtype = nrn_get_mechtype(_mechanism[1]);
+ hoc_register_parm_default(_mechtype, &_parm_default);
      _nrn_setdata_reg(_mechtype, _setdata);
-     _nrn_thread_reg(_mechtype, 2, _update_ion_pointer);
  #if NMODL_TEXT
   register_nmodl_text_and_filename(_mechtype);
 #endif
+   _nrn_mechanism_register_data_fields(_mechtype,
+                                       _nrn_mechanism_field<double>{"baseline_gmax"} /* 0 */,
+                                       _nrn_mechanism_field<double>{"ena"} /* 1 */,
+                                       _nrn_mechanism_field<double>{"ek"} /* 2 */,
+                                       _nrn_mechanism_field<double>{"p_ratio"} /* 3 */,
+                                       _nrn_mechanism_field<double>{"potentiation_threshold"} /* 4 */,
+                                       _nrn_mechanism_field<double>{"depression_threshold"} /* 5 */,
+                                       _nrn_mechanism_field<double>{"potentiation_rate"} /* 6 */,
+                                       _nrn_mechanism_field<double>{"depression_rate"} /* 7 */,
+                                       _nrn_mechanism_field<double>{"potentiation_strength"} /* 8 */,
+                                       _nrn_mechanism_field<double>{"depression_strength"} /* 9 */,
+                                       _nrn_mechanism_field<double>{"calcium_baseline"} /* 10 */,
+                                       _nrn_mechanism_field<double>{"potentiation_decay"} /* 11 */,
+                                       _nrn_mechanism_field<double>{"depression_decay"} /* 12 */,
+                                       _nrn_mechanism_field<double>{"P"} /* 13 */,
+                                       _nrn_mechanism_field<double>{"D"} /* 14 */,
+                                       _nrn_mechanism_field<double>{"ina"} /* 15 */,
+                                       _nrn_mechanism_field<double>{"ik"} /* 16 */,
+                                       _nrn_mechanism_field<double>{"gna"} /* 17 */,
+                                       _nrn_mechanism_field<double>{"gk"} /* 18 */,
+                                       _nrn_mechanism_field<double>{"gmax"} /* 19 */,
+                                       _nrn_mechanism_field<double>{"DP"} /* 20 */,
+                                       _nrn_mechanism_field<double>{"DD"} /* 21 */,
+                                       _nrn_mechanism_field<double>{"_g"} /* 22 */,
+                                       _nrn_mechanism_field<double*>{"_nd_area", "area"} /* 0 */,
+                                       _nrn_mechanism_field<Point_process*>{"_pntproc", "pntproc"} /* 1 */,
+                                       _nrn_mechanism_field<double*>{"_ion_ina", "na_ion"} /* 2 */,
+                                       _nrn_mechanism_field<double*>{"_ion_dinadv", "na_ion"} /* 3 */,
+                                       _nrn_mechanism_field<double*>{"_ion_ik", "k_ion"} /* 4 */,
+                                       _nrn_mechanism_field<double*>{"_ion_dikdv", "k_ion"} /* 5 */,
+                                       _nrn_mechanism_field<double*>{"receptor_activation", "pointer"} /* 6 */,
+                                       _nrn_mechanism_field<double*>{"local_cai", "pointer"} /* 7 */,
+                                       _nrn_mechanism_field<int>{"_cvode_ieq", "cvodeieq"} /* 8 */);
   hoc_register_prop_size(_mechtype, 23, 9);
   hoc_register_dparam_semantics(_mechtype, 0, "area");
   hoc_register_dparam_semantics(_mechtype, 1, "pntproc");
@@ -319,8 +397,9 @@ extern void _cvode_abstol( Symbol**, double*, int);
   hoc_register_dparam_semantics(_mechtype, 8, "cvodeieq");
  	hoc_register_cvode(_mechtype, _ode_count, _ode_map, _ode_spec, _ode_matsol);
  	hoc_register_tolerance(_mechtype, _hoc_state_tol, &_atollist);
- 	hoc_register_var(hoc_scdoub, hoc_vdoub, hoc_intfunc);
- 	ivoc_help("help ?1 AMPA_Channel_Potentiation AMPA_Channel_Potentiation.mod\n");
+ 
+    hoc_register_var(hoc_scdoub, hoc_vdoub, hoc_intfunc);
+ 	ivoc_help("help ?1 AMPA_Channel_Potentiation C\n");
  hoc_register_limits(_mechtype, _hoc_parm_limits);
  hoc_register_units(_mechtype, _hoc_parm_units);
  }
@@ -332,10 +411,10 @@ static int _ninits = 0;
 static int _match_recurse=1;
 static void _modl_cleanup(){ _match_recurse=1;}
  
-static int _ode_spec1(_threadargsproto_);
-/*static int _ode_matsol1(_threadargsproto_);*/
- static int _slist1[2], _dlist1[2];
- static int state(_threadargsproto_);
+static int _ode_spec1(_internalthreadargsproto_);
+/*static int _ode_matsol1(_internalthreadargsproto_);*/
+ static neuron::container::field_index _slist1[2], _dlist1[2];
+ static int state(_internalthreadargsproto_);
  
 /*CVODE*/
  static int _ode_spec1 () {_reset=0;
@@ -379,56 +458,65 @@ return _lmax;
  
 static double _hoc_max(void* _vptr) {
  double _r;
-    _hoc_setdata(_vptr);
+    auto* const _pnt = static_cast<Point_process*>(_vptr);
+  auto* const _p = _pnt->_prop;
+  if (!_p) {
+    hoc_execerror("POINT_PROCESS data instance not valid", NULL);
+  }
+   _setdata(_p);
  _r =  max (  *getarg(1) , *getarg(2) );
  return(_r);
 }
  
 static int _ode_count(int _type){ return 2;}
  
-static void _ode_spec(NrnThread* _nt, Memb_list* _ml, int _type) {
-   Datum* _thread;
-   Node* _nd; double _v; int _iml, _cntml;
-  _cntml = _ml->_nodecount;
-  _thread = _ml->_thread;
+static void _ode_spec(_nrn_model_sorted_token const& _sorted_token, NrnThread* _nt, Memb_list* _ml_arg, int _type) {
+      Node* _nd{};
+  double _v{};
+  int _cntml;
+  _nrn_mechanism_cache_range _lmr{_sorted_token, *_nt, *_ml_arg, _type};
+  _ml = &_lmr;
+  _cntml = _ml_arg->_nodecount;
+  Datum *_thread{_ml_arg->_thread};
+  double* _globals = nullptr;
+  if (gind != 0 && _thread != nullptr) { _globals = _thread[_gth].get<double*>(); }
   for (_iml = 0; _iml < _cntml; ++_iml) {
-    _p = _ml->_data[_iml]; _ppvar = _ml->_pdata[_iml];
-    _nd = _ml->_nodelist[_iml];
+    _ppvar = _ml_arg->_pdata[_iml];
+    _nd = _ml_arg->_nodelist[_iml];
     v = NODEV(_nd);
      _ode_spec1 ();
    }}
  
-static void _ode_map(int _ieq, double** _pv, double** _pvdot, double* _pp, Datum* _ppd, double* _atol, int _type) { 
- 	int _i; _p = _pp; _ppvar = _ppd;
-	_cvode_ieq = _ieq;
-	for (_i=0; _i < 2; ++_i) {
-		_pv[_i] = _pp + _slist1[_i];  _pvdot[_i] = _pp + _dlist1[_i];
-		_cvode_abstol(_atollist, _atol, _i);
-	}
+static void _ode_map(Prop* _prop, int _ieq, neuron::container::data_handle<double>* _pv, neuron::container::data_handle<double>* _pvdot, double* _atol, int _type) { 
+  _ppvar = _nrn_mechanism_access_dparam(_prop);
+  _cvode_ieq = _ieq;
+  for (int _i=0; _i < 2; ++_i) {
+    _pv[_i] = _nrn_mechanism_get_param_handle(_prop, _slist1[_i]);
+    _pvdot[_i] = _nrn_mechanism_get_param_handle(_prop, _dlist1[_i]);
+    _cvode_abstol(_atollist, _atol, _i);
+  }
  }
  
-static void _ode_matsol_instance1(_threadargsproto_) {
+static void _ode_matsol_instance1(_internalthreadargsproto_) {
  _ode_matsol1 ();
  }
  
-static void _ode_matsol(NrnThread* _nt, Memb_list* _ml, int _type) {
-   Datum* _thread;
-   Node* _nd; double _v; int _iml, _cntml;
-  _cntml = _ml->_nodecount;
-  _thread = _ml->_thread;
+static void _ode_matsol(_nrn_model_sorted_token const& _sorted_token, NrnThread* _nt, Memb_list* _ml_arg, int _type) {
+      Node* _nd{};
+  double _v{};
+  int _cntml;
+  _nrn_mechanism_cache_range _lmr{_sorted_token, *_nt, *_ml_arg, _type};
+  _ml = &_lmr;
+  _cntml = _ml_arg->_nodecount;
+  Datum *_thread{_ml_arg->_thread};
+  double* _globals = nullptr;
+  if (gind != 0 && _thread != nullptr) { _globals = _thread[_gth].get<double*>(); }
   for (_iml = 0; _iml < _cntml; ++_iml) {
-    _p = _ml->_data[_iml]; _ppvar = _ml->_pdata[_iml];
-    _nd = _ml->_nodelist[_iml];
+    _ppvar = _ml_arg->_pdata[_iml];
+    _nd = _ml_arg->_nodelist[_iml];
     v = NODEV(_nd);
  _ode_matsol_instance1(_threadargs_);
  }}
- extern void nrn_update_ion_pointer(Symbol*, Datum*, int, int);
- static void _update_ion_pointer(Datum* _ppvar) {
-   nrn_update_ion_pointer(_na_sym, _ppvar, 2, 3);
-   nrn_update_ion_pointer(_na_sym, _ppvar, 3, 4);
-   nrn_update_ion_pointer(_k_sym, _ppvar, 4, 3);
-   nrn_update_ion_pointer(_k_sym, _ppvar, 5, 4);
- }
 
 static void initmodel() {
   int _i; double _save;_ninits++;
@@ -447,23 +535,16 @@ static void initmodel() {
 }
 }
 
-static void nrn_init(NrnThread* _nt, Memb_list* _ml, int _type){
-Node *_nd; double _v; int* _ni; int _iml, _cntml;
-#if CACHEVEC
-    _ni = _ml->_nodeindices;
-#endif
-_cntml = _ml->_nodecount;
+static void nrn_init(_nrn_model_sorted_token const& _sorted_token, NrnThread* _nt, Memb_list* _ml_arg, int _type){
+Node *_nd; double _v; int* _ni; int _cntml;
+_nrn_mechanism_cache_range _lmr{_sorted_token, *_nt, *_ml_arg, _type};
+auto* const _vec_v = _nt->node_voltage_storage();
+_ml = &_lmr;
+_ni = _ml_arg->_nodeindices;
+_cntml = _ml_arg->_nodecount;
 for (_iml = 0; _iml < _cntml; ++_iml) {
- _p = _ml->_data[_iml]; _ppvar = _ml->_pdata[_iml];
-#if CACHEVEC
-  if (use_cachevec) {
-    _v = VEC_V(_ni[_iml]);
-  }else
-#endif
-  {
-    _nd = _ml->_nodelist[_iml];
-    _v = NODEV(_nd);
-  }
+ _ppvar = _ml_arg->_pdata[_iml];
+   _v = _vec_v[_ni[_iml]];
  v = _v;
  initmodel();
   }}
@@ -481,24 +562,19 @@ static double _nrn_current(double _v){double _current=0.;v=_v;{ {
 } return _current;
 }
 
-static void nrn_cur(NrnThread* _nt, Memb_list* _ml, int _type){
-Node *_nd; int* _ni; double _rhs, _v; int _iml, _cntml;
-#if CACHEVEC
-    _ni = _ml->_nodeindices;
-#endif
-_cntml = _ml->_nodecount;
+static void nrn_cur(_nrn_model_sorted_token const& _sorted_token, NrnThread* _nt, Memb_list* _ml_arg, int _type){
+_nrn_mechanism_cache_range _lmr{_sorted_token, *_nt, *_ml_arg, _type};
+auto const _vec_rhs = _nt->node_rhs_storage();
+auto const _vec_sav_rhs = _nt->node_sav_rhs_storage();
+auto const _vec_v = _nt->node_voltage_storage();
+Node *_nd; int* _ni; double _rhs, _v; int _cntml;
+_ml = &_lmr;
+_ni = _ml_arg->_nodeindices;
+_cntml = _ml_arg->_nodecount;
 for (_iml = 0; _iml < _cntml; ++_iml) {
- _p = _ml->_data[_iml]; _ppvar = _ml->_pdata[_iml];
-#if CACHEVEC
-  if (use_cachevec) {
-    _v = VEC_V(_ni[_iml]);
-  }else
-#endif
-  {
-    _nd = _ml->_nodelist[_iml];
-    _v = NODEV(_nd);
-  }
- _g = _nrn_current(_v + .001);
+ _ppvar = _ml_arg->_pdata[_iml];
+   _v = _vec_v[_ni[_iml]];
+ auto const _g_local = _nrn_current(_v + .001);
  	{ double _dik;
  double _dina;
   _dina = ina;
@@ -507,64 +583,47 @@ for (_iml = 0; _iml < _cntml; ++_iml) {
   _ion_dinadv += (_dina - ina)/.001 * 1.e2/ (_nd_area);
   _ion_dikdv += (_dik - ik)/.001 * 1.e2/ (_nd_area);
  	}
- _g = (_g - _rhs)/.001;
+ _g = (_g_local - _rhs)/.001;
   _ion_ina += ina * 1.e2/ (_nd_area);
   _ion_ik += ik * 1.e2/ (_nd_area);
  _g *=  1.e2/(_nd_area);
  _rhs *= 1.e2/(_nd_area);
-#if CACHEVEC
-  if (use_cachevec) {
-	VEC_RHS(_ni[_iml]) -= _rhs;
-  }else
-#endif
-  {
-	NODERHS(_nd) -= _rhs;
-  }
+	 _vec_rhs[_ni[_iml]] -= _rhs;
  
 }}
 
-static void nrn_jacob(NrnThread* _nt, Memb_list* _ml, int _type){
+static void nrn_jacob(_nrn_model_sorted_token const& _sorted_token, NrnThread* _nt, Memb_list* _ml_arg, int _type) {
+_nrn_mechanism_cache_range _lmr{_sorted_token, *_nt, *_ml_arg, _type};
+auto const _vec_d = _nt->node_d_storage();
+auto const _vec_sav_d = _nt->node_sav_d_storage();
+auto* const _ml = &_lmr;
 Node *_nd; int* _ni; int _iml, _cntml;
-#if CACHEVEC
-    _ni = _ml->_nodeindices;
-#endif
-_cntml = _ml->_nodecount;
+_ni = _ml_arg->_nodeindices;
+_cntml = _ml_arg->_nodecount;
 for (_iml = 0; _iml < _cntml; ++_iml) {
- _p = _ml->_data[_iml];
-#if CACHEVEC
-  if (use_cachevec) {
-	VEC_D(_ni[_iml]) += _g;
-  }else
-#endif
-  {
-     _nd = _ml->_nodelist[_iml];
-	NODED(_nd) += _g;
-  }
+  _vec_d[_ni[_iml]] += _g;
  
 }}
 
-static void nrn_state(NrnThread* _nt, Memb_list* _ml, int _type){
-Node *_nd; double _v = 0.0; int* _ni; int _iml, _cntml;
-#if CACHEVEC
-    _ni = _ml->_nodeindices;
-#endif
-_cntml = _ml->_nodecount;
+static void nrn_state(_nrn_model_sorted_token const& _sorted_token, NrnThread* _nt, Memb_list* _ml_arg, int _type){
+Node *_nd; double _v = 0.0; int* _ni; int _cntml;
+_nrn_mechanism_cache_range _lmr{_sorted_token, *_nt, *_ml_arg, _type};
+auto* const _vec_v = _nt->node_voltage_storage();
+_ml = &_lmr;
+_ni = _ml_arg->_nodeindices;
+_cntml = _ml_arg->_nodecount;
 for (_iml = 0; _iml < _cntml; ++_iml) {
- _p = _ml->_data[_iml]; _ppvar = _ml->_pdata[_iml];
- _nd = _ml->_nodelist[_iml];
-#if CACHEVEC
-  if (use_cachevec) {
-    _v = VEC_V(_ni[_iml]);
-  }else
-#endif
-  {
-    _nd = _ml->_nodelist[_iml];
-    _v = NODEV(_nd);
-  }
+ _ppvar = _ml_arg->_pdata[_iml];
+ _nd = _ml_arg->_nodelist[_iml];
+   _v = _vec_v[_ni[_iml]];
  v=_v;
 {
  { error =  state();
- if(error){fprintf(stderr,"at line 51 in file AMPA_Channel_Potentiation.mod:\nBREAKPOINT {\n"); nrn_complain(_p); abort_run(error);}
+ if(error){
+  std_cerr_stream << "at line 51 in file AMPA_Channel_Potentiation.mod:\nBREAKPOINT {\n";
+  std_cerr_stream << _ml << ' ' << _iml << '\n';
+  abort_run(error);
+}
  }  }}
 
 }
@@ -574,14 +633,14 @@ static void terminal(){}
 static void _initlists() {
  int _i; static int _first = 1;
   if (!_first) return;
- _slist1[0] = P_columnindex;  _dlist1[0] = DP_columnindex;
- _slist1[1] = D_columnindex;  _dlist1[1] = DD_columnindex;
+ _slist1[0] = {P_columnindex, 0};  _dlist1[0] = {DP_columnindex, 0};
+ _slist1[1] = {D_columnindex, 0};  _dlist1[1] = {DD_columnindex, 0};
 _first = 0;
 }
 
 #if NMODL_TEXT
 static void register_nmodl_text_and_filename(int mech_type) {
-    const char* nmodl_filename = "AMPA_Channel_Potentiation.mod";
+    const char* nmodl_filename = "C";
     const char* nmodl_file_text = 
   "TITLE AMPA_Channel with Calcium Dependent Potentiation and Depression\n"
   "\n"
